@@ -5,7 +5,7 @@
      <title>WebSocket</title>
  </head>
  <body>
-     <h1>Echo Test</h1>
+     <h1>websocket连接并发送数据</h1>
      <input type="text" id="sendTxt">
      <button id="sendBtn">发送</button>
      <button id="close">关闭</button>
@@ -24,8 +24,7 @@
          var websocket = new WebSocket("ws://118.31.33.143:8089/");
          websocket.onopen = function(){
              console.log("websocket open");
-             document.getElementById("recv").innerHTML = "Connected";
-             // websocket.send('{"action":"getRoomInfo", "info":""}');
+             document.getElementById("recv").innerHTML = "connect to 118.31.33.143:8089 successed";
          }
          websocket.inclose = function(){
              console.log('websocket close');
@@ -37,7 +36,7 @@
          }
          document.getElementById("sendBtn").onclick=function(){
              var txt = document.getElementById("sendTxt").value;
-             txt = getJsonStr("getRoomInfo", "");
+             txt = getJsonStr("getRoomInfo", txt);
              websocket.send(txt);
          }
 
