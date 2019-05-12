@@ -11,6 +11,16 @@
      <button id="close">关闭</button>
      <div id="recv"></div>
      <script type="text/javascript">
+         
+         function getJsonStr(action, info) {
+             return '{"action":"'+action+'", "info":"'+info+'"}';
+         }
+
+         function getJsonObj(jsonStr){
+             jsonStr = JSON.parse(jsonStr);
+             return JSON.parse(jsonStr);
+         }
+         
          var websocket = new WebSocket("ws://118.31.33.143:8089/");
          websocket.onopen = function(){
              console.log("websocket open");
@@ -22,10 +32,12 @@
          }
          websocket.onmessage = function(e){
              console.log(e.data);
-             document.getElementById("recv").innerHTML = e.data;
+             var jsonObj = getJsonObj(e.data);
+             document.getElementById("recv").innerHTML = jsonObj.status+":"+jsonObj.message;
          }
          document.getElementById("sendBtn").onclick=function(){
              var txt = document.getElementById("sendTxt").value;
+             txt = getJsonStr("getRoomInfo", "");
              websocket.send(txt);
          }
 

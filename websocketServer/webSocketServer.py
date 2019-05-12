@@ -10,11 +10,12 @@ class webSocketServer(object):
     dictSocketShakeHandKey = {} #用于存放每一个socket的握手需要的key值
     dictRoom = {}#用于存放连接上来的socket在哪个房间的字典。比如 "room1":[{"socketHandle":socket1,"prepareStatus":status}, {"socketHandle":socket2,"prepareStatus":status}]。每次有一个socket连接上来，第一时间将该信息发送给该连接。
 
-    def initSocket(self):#初始化一个socket
+    def __init__(self):#初始化一个socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.bind(("0.0.0.0", 8089))
         self.sock.setblocking(False)
         self.sock.listen(100)
+        self.acceptOne()
 
     def acceptOne(self):#允许一个socket连接上来
         self.epollHandle = select.epoll()
@@ -43,17 +44,12 @@ class webSocketServer(object):
                                 self.closeConnect(sock)
                             elif frameOpCode == 1:
                                 message = self.parseWebSocketData(message)#拿到客户端输入的数据，每次都要解包
+                                # print(message)
                                 try:#这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
                                     message = self.parseStrToJson(message)
-                                    if "action" in message and "info" in message:
-                                        if message["action"] == "getRoomInfo":  # websocket连接（握手）完成，客户端会直接发送这个数据到这儿
-                                            self.dictSocketHandleSendContent[sock] = '{"status":"ok", "message":'+str(self.dictRoom)+'}'
-                                        else:
-                                            self.dictSocketHandleSendContent[sock] = '{"status":"ok", "message":"xxxx"}'
-                                    else:
-                                        self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"xxxx"}'
+                                    self.accordActionToSend(sock, message)#根据获取到的json数据，然后对应操作处理的逻辑
                                 except Exception as err:
-                                    self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"xxxx"}'
+                                    self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
                                 # print(message)
 
                                 self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
@@ -86,18 +82,6 @@ class webSocketServer(object):
         self.dictSocketHandle[sock].close()
         self.epollHandle.unregister(sock)
         self.dictSocketHandle.pop(sock)
-
-    def joinRoom(self):#用户进入一个房间
-        pass
-
-    def exiyRoom(self):#用户退出一个房间
-        pass
-
-    def prepareStatus(self):#用户点击准备
-        pass
-
-    def unPrepareStatus(self):#用户取消准备
-        pass
 
     def parseStrToJson(self, strData):#将json字符串转成dict
         return json.loads(strData)
@@ -277,6 +261,4 @@ class webSocketServer(object):
 
 if __name__ == "__main__":
     socketService = webSocketServer()
-    socketService.initSocket()
-    socketService.acceptOne()
 
