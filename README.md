@@ -1,0 +1,3 @@
+# webSocketServer
+python3 webSocketServer
+本计划写一个网页小游戏的，目前仅仅只实现了websocket的消息接收与发送，等有时间了再去调整代码，做成一个小游戏
