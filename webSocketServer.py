@@ -40,7 +40,7 @@ class webSocketServer(object):
                         else:
                             frameOpCode = self.parseFrameOpCode(message)#解析数据帧中的opcode，确定客户端的请求到底是啥
                             if frameOpCode == 0:
-                                self.epollHandle.modify(sock, select.EPOLLHUP | select.EPOLLET)  # |select.EPOLLET
+                                self.closeConnect(sock)
                             elif frameOpCode == 1:
                                 message = self.parseWebSocketData(message)#拿到客户端输入的数据，每次都要解包
                                 try:#这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
@@ -81,6 +81,11 @@ class webSocketServer(object):
                         self.dictSocketHandle.pop(sock)
 
 
+    def closeConnect(self, sock):#关闭一个socket连接
+        print("socket is closed " + str(sock))
+        self.dictSocketHandle[sock].close()
+        self.epollHandle.unregister(sock)
+        self.dictSocketHandle.pop(sock)
 
     def joinRoom(self):#用户进入一个房间
         pass
