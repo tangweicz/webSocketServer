@@ -176,7 +176,7 @@ class webSocketServer(object):
 
     def parseFrameOpCode(self, frame):#解析每一次请求过来的数据帧中的opcode，确定客户端现在的要求，返回 0=客户端退出、1=接收到数据、3=错误、4=未知（暂时不用）
         print("数据为：", frame)
-        if(frame == b""):
+        if(frame == b""):#这儿是为了兼容safair浏览器
             print('Client closed connection.')
             return 0
         tmpData = frame[0]
