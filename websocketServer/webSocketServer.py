@@ -10,9 +10,9 @@ class webSocketServer(object):
     dictSocketShakeHandKey = {} #用于存放每一个socket的握手需要的key值
     dictRoom = {}#用于存放连接上来的socket在哪个房间的字典。比如 "room1":[{"socketHandle":socket1,"prepareStatus":status}, {"socketHandle":socket2,"prepareStatus":status}]。每次有一个socket连接上来，第一时间将该信息发送给该连接。
 
-    def __init__(self):#初始化一个socket
+    def __init__(self, ipAddr, port):#初始化一个socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(("0.0.0.0", 8089))
+        self.sock.bind((ipAddr, port))
         self.sock.setblocking(False)
         self.sock.listen(100)
         self.acceptOne()

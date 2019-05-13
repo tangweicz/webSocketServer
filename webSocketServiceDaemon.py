@@ -4,8 +4,8 @@
 from websocketServer.webSocketServer import webSocketServer
 
 class webSocketServiceDaemon(webSocketServer):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, ipAddr, port):
+        super().__init__(ipAddr, port)
 
     #通讯格式为：{"status":"ok", "message":"xxxx"}。
     def accordActionToSend(self, sock, message):
@@ -19,4 +19,6 @@ class webSocketServiceDaemon(webSocketServer):
             self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
 
 if __name__ == "__main__":
-    webSocketServiceDaemon()
+    ipAddr = "0.0.0.0"
+    port = 8089
+    webSocketServiceDaemon(ipAddr, port)
