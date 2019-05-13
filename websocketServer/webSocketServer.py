@@ -32,31 +32,33 @@ class webSocketServer(object):
                 else:
                     if event == select.EPOLLIN:  # 有可读事件
                         message = self.recvMessage(sock)
-                        if not self.dictSocketShakeHandStatus[sock]:
-                            # print("拿到的数据为", message.decode("utf-8"))
-                            message = self.decodeToUtf8(message)
-                            headerData = self.parseHeaderData(message)  # 解析header头数据
-                            self.dictSocketShakeHandKey[sock] = headerData
-                            self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
-                        else:
-                            frameOpCode = self.parseFrameOpCode(message)#解析数据帧中的opcode，确定客户端的请求到底是啥
-                            if frameOpCode == 0:
-                                self.closeConnect(sock)
-                            elif frameOpCode == 1:
-                                message = self.parseWebSocketData(message)#拿到客户端输入的数据，每次都要解包
-                                # print(message)
-                                try:#这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
-                                    message = self.parseStrToJson(message)
-                                    self.accordActionToSend(sock, message)#根据获取到的json数据，然后对应操作处理的逻辑
-                                except Exception as err:
-                                    self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
-                                # print(message)
-
-                                self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
-                            elif frameOpCode == 3:
-                                print("解析数据帧错误")
+                        # print("拿到的数据为：", message)
+                        if message:
+                            if not self.dictSocketShakeHandStatus[sock]:
+                                message = self.decodeToUtf8(message)
+                                headerData = self.parseHeaderData(message)  # 解析header头数据
+                                if headerData:
+                                    self.dictSocketShakeHandKey[sock] = headerData
+                                    self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
                             else:
-                                print("解析数据帧暂时不用的状态")
+                                frameOpCode = self.parseFrameOpCode(message)#解析数据帧中的opcode，确定客户端的请求到底是啥
+                                if frameOpCode == 0:
+                                    self.closeConnect(sock)
+                                elif frameOpCode == 1:
+                                    message = self.parseWebSocketData(message)#拿到客户端输入的数据，每次都要解包
+                                    # print(message)
+                                    try:#这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
+                                        message = self.parseStrToJson(message)
+                                        self.accordActionToSend(sock, message)#根据获取到的json数据，然后对应操作处理的逻辑
+                                    except Exception as err:
+                                        self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
+                                    # print(message)
+
+                                    self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
+                                elif frameOpCode == 3:
+                                    print("解析数据帧错误")
+                                else:
+                                    print("解析数据帧暂时不用的状态")
 
                     elif event == select.EPOLLOUT:  # 可写事件
                         if not self.dictSocketShakeHandStatus[sock]:
@@ -162,17 +164,21 @@ class webSocketServer(object):
         return strings
 
     def parseHeaderData(self, headerData):  # 解析头数据，分析出sec-websocket-key字段，然后返回
-        data = headerData.split("\r\n\r\n")
-        data = data[0]
-        allData = data.split("\r\n")
-        result = collections.OrderedDict()
-        for item in allData:
-            res = item.split(":", 1)
-            if res[0].startswith("GET"):
-                result["HTTP"] = res[0]
-            else:
-                result[res[0]] = res[1]
-        return result
+        try:
+            data = headerData.split("\r\n\r\n")
+            data = data[0]
+            allData = data.split("\r\n")
+            result = collections.OrderedDict()
+            for item in allData:
+                res = item.split(":", 1)
+                if res[0].startswith("GET"):
+                    result["HTTP"] = res[0]
+                else:
+                    result[res[0]] = res[1]
+            return result
+        except Exception as err:
+            print("解析握手数据失败，不能建立连接")
+            return False
 
     def parseFrameOpCode(self, frame):#解析每一次请求过来的数据帧中的opcode，确定客户端现在的要求，返回 0=客户端退出、1=接收到数据、3=错误、4=未知（暂时不用）
         print("数据为：", frame)
