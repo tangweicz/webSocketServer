@@ -1,7 +1,7 @@
 #!/Library/Frameworks/Python.framework/Versions/3.6/bin/python3.6
 #! -*- coding:utf-8 -*-
 
-from websocketServer.webSocketServer import webSocketServer
+from websocketServer.webSocketServerUseEpoll import webSocketServer
 
 class webSocketServiceDaemon(webSocketServer):
     def __init__(self, ipAddr, port):
