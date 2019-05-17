@@ -23,14 +23,14 @@ class webSocketServer(object):
         while True:
             allSocketHandle = self.epollHandle.poll(1)
             for sock, event in allSocketHandle:
-                if sock == self.sock.fileno():
-                    client, address = self.sock.accept()
-                    client.setblocking(False)
-                    self.dictSocketShakeHandStatus[client.fileno()] = False
-                    self.dictSocketHandle[client.fileno()] = client
-                    self.epollHandle.register(client.fileno(), select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
-                else:
-                    if event == select.EPOLLIN:  # 有可读事件
+                if event == select.EPOLLIN:  # 有可读事件
+                    if sock == self.sock.fileno():
+                        client, address = self.sock.accept()
+                        client.setblocking(False)
+                        self.dictSocketShakeHandStatus[client.fileno()] = False
+                        self.dictSocketHandle[client.fileno()] = client
+                        self.epollHandle.register(client.fileno(), select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
+                    else:
                         message = self.recvMessage(sock)
                         # print("拿到的数据为：", message)
                         if message:
@@ -59,25 +59,23 @@ class webSocketServer(object):
                                     print("解析数据帧错误")
                                 else:
                                     print("解析数据帧暂时不用的状态")
-
-                    elif event == select.EPOLLOUT:  # 可写事件
-                        if not self.dictSocketShakeHandStatus[sock]:
-                            self.sendMessage(sock, "shakeSuccess")
-                        else:
-                            self.sendMessage(sock, self.parseDictToJson(self.dictSocketHandleSendContent[sock]))
-                            self.dictSocketHandleSendContent.pop(sock)
-                        self.epollHandle.modify(sock, select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
-                    elif event == select.EPOLLHUP:#客户端断开事件
-                        print("socket is closed " + str(sock))
-                        self.dictSocketHandle[sock].close()
-                        self.epollHandle.unregister(sock)
-                        self.dictSocketHandle.pop(sock)
+                elif event == select.EPOLLOUT:  # 可写事件
+                    if not self.dictSocketShakeHandStatus[sock]:
+                        self.sendMessage(sock, "shakeSuccess")
                     else:
-                        print("socket is closed " + str(sock))
-                        self.dictSocketHandle[sock].close()
-                        self.epollHandle.unregister(sock)
-                        self.dictSocketHandle.pop(sock)
-
+                        self.sendMessage(sock, self.parseDictToJson(self.dictSocketHandleSendContent[sock]))
+                        self.dictSocketHandleSendContent.pop(sock)
+                    self.epollHandle.modify(sock, select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
+                elif event == select.EPOLLHUP:#客户端断开事件
+                    print("socket is closed " + str(sock))
+                    self.dictSocketHandle[sock].close()
+                    self.epollHandle.unregister(sock)
+                    self.dictSocketHandle.pop(sock)
+                else:
+                    print("socket is closed " + str(sock))
+                    self.dictSocketHandle[sock].close()
+                    self.epollHandle.unregister(sock)
+                    self.dictSocketHandle.pop(sock)
 
     def closeConnect(self, sock):#关闭一个socket连接
         print("socket is closed " + str(sock))
@@ -185,7 +183,7 @@ class webSocketServer(object):
         if(frame == b""):#这儿是为了兼容safair浏览器
             print('Client closed connection.')
             return 0
-        tmpData = frame[0]
+        tmpData = frame[0]#[0]取一个字节byte的数据（8bit）的数据，即取出opcode
         print("帧为：", tmpData)
         if not tmpData:
             print('Client closed connection.')
@@ -217,10 +215,8 @@ class webSocketServer(object):
     def parseWebSocketData(self, info):#解析头部数据，值要我们的消息主体，剔除掉header头信息
         payload_len = info[1] & 127
         if payload_len == 126:
-            # 数据头部延伸的长度
-            extend_payload_len = info[2:4]
-            # 加密的4个字节
-            mask = info[4:8]
+            extend_payload_len = info[2:4]# 数据头部延伸的长度
+            mask = info[4:8]# 加密的4个字节
             decoded = info[8:]# 数据
         elif payload_len == 127:
             extend_payload_len = info[2:10]
