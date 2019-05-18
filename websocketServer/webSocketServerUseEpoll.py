@@ -51,7 +51,7 @@ class webSocketServer(object):
                                         message = self.parseStrToJson(message)
                                         self.accordActionToSend(sock, message)#根据获取到的json数据，然后对应操作处理的逻辑
                                     except Exception as err:
-                                        self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
+                                        self.dictSocketHandleSendContent[sock.fileno()] = '{"status":"error", "message":"通讯数据格式错误"}'
                                     # print(message)
 
                                     self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
@@ -63,6 +63,9 @@ class webSocketServer(object):
                     if not self.dictSocketShakeHandStatus[sock]:
                         self.sendMessage(sock, "shakeSuccess")
                     else:
+
+                        print(self.dictSocketHandleSendContent)
+                        print("xxxxxxxxx"+str(sock))
                         self.sendMessage(sock, self.parseDictToJson(self.dictSocketHandleSendContent[sock]))
                         self.dictSocketHandleSendContent.pop(sock)
                     self.epollHandle.modify(sock, select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
@@ -91,7 +94,7 @@ class webSocketServer(object):
 
     def sendMessage(self, sockHandle, message):#用户提交数据的数据
         # print("准备发送数据到客户端.....\n")
-        client = self.dictSocketHandle[sockHandle];
+        client = self.dictSocketHandle[sockHandle]
         if not self.dictSocketShakeHandStatus[sockHandle]:
             # print("发送握手数据到客户端.....")
             dictData = self.dictSocketShakeHandKey[sockHandle]
@@ -108,6 +111,7 @@ class webSocketServer(object):
             # print(strings)
             strings = strings.encode("utf-8")
             self.dictSocketShakeHandKey.pop(sockHandle)
+
         else:
             # print("已经握过手，直接发送数据......")
             strings = self.packWebSocketData(message.encode("utf-8"))  # 要发送的数据
@@ -117,6 +121,9 @@ class webSocketServer(object):
             try:
                 if not self.dictSocketShakeHandStatus[sockHandle]:
                     self.dictSocketShakeHandStatus[sockHandle] = True
+                    if len(self.dictSocketHandle) >= 1:  # 一旦新的连接握手成功，这儿就发一个广播，告诉所有连接上来的用户，已经有多少用户在线上
+                        self.boardCast(sockHandle)#发送广播对象，不包含刚刚连接上来的
+
                 # print("要发送数据总长度：", totalLen)
                 m = strings[sendLen:]
                 # print("mmmmmmmmmmmm", m)
@@ -177,6 +184,16 @@ class webSocketServer(object):
         except Exception as err:
             print("解析握手数据失败，不能建立连接")
             return False
+
+    def boardCast(self, sock):#广播到所有的连接上
+        print("已经有" + str(len(self.dictSocketHandle)) + "个socket连接了")
+        print(self.dictSocketHandle)
+        print("***************")
+        for everySock in self.dictSocketHandle.values():
+            print(everySock)
+            if not sock == everySock:
+                self.dictSocketHandleSendContent[everySock.fileno()] = '{"status":"success", "message":"have ' + str(len(self.dictSocketHandle)) + ' socket connect"}'
+                self.epollHandle.modify(everySock, select.EPOLLOUT | select.EPOLLET)
 
     def parseFrameOpCode(self, frame):#解析每一次请求过来的数据帧中的opcode，确定客户端现在的要求，返回 0=客户端退出、1=接收到数据、3=错误、4=未知（暂时不用）
         print("数据为：", frame)
