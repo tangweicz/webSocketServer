@@ -21,10 +21,10 @@
              return JSON.parse(jsonStr);
          }
          
-         var websocket = new WebSocket("ws://118.31.33.143:8089/");
+         var websocket = new WebSocket("ws://192.168.1.104:8089/");
          websocket.onopen = function(){
              console.log("websocket open");
-             document.getElementById("recv").innerHTML = "connect to 118.31.33.143:8089 successed";
+             document.getElementById("recv").innerHTML = "connect to 192.168.1.104:8089 successed";
          }
          websocket.inclose = function(){
              console.log('websocket close');

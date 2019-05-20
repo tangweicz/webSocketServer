@@ -111,7 +111,8 @@ class webSocketServer(object):
             # print(strings)
             strings = strings.encode("utf-8")
             self.dictSocketShakeHandKey.pop(sockHandle)
-
+            if len(self.dictSocketHandle) >= 1:  # 一旦新的连接握手成功，这儿就发一个广播，告诉所有连接上来的用户，已经有多少用户在线上
+                self.boardCast(sockHandle)  # 发送广播对象，不包含刚刚连接上来的
         else:
             # print("已经握过手，直接发送数据......")
             strings = self.packWebSocketData(message.encode("utf-8"))  # 要发送的数据
@@ -121,9 +122,6 @@ class webSocketServer(object):
             try:
                 if not self.dictSocketShakeHandStatus[sockHandle]:
                     self.dictSocketShakeHandStatus[sockHandle] = True
-                    if len(self.dictSocketHandle) >= 1:  # 一旦新的连接握手成功，这儿就发一个广播，告诉所有连接上来的用户，已经有多少用户在线上
-                        self.boardCast(sockHandle)#发送广播对象，不包含刚刚连接上来的
-
                 # print("要发送数据总长度：", totalLen)
                 m = strings[sendLen:]
                 # print("mmmmmmmmmmmm", m)
