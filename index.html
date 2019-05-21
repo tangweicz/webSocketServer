@@ -9,6 +9,10 @@
      <input type="text" id="sendTxt">
      <button id="sendBtn">发送</button>
      <button id="close">关闭</button>
+
+     <input type="file" name="myfile" id="file" />
+     <button id="sendfile" onclick="sendFile()">发送文件</button>
+
      <div id="recv"></div>
      <script type="text/javascript">
          
@@ -22,6 +26,7 @@
          }
          
          var websocket = new WebSocket("ws://192.168.1.104:8089/");
+         websocket.binaryType = 'arraybuffer'
          websocket.onopen = function(){
              console.log("websocket open");
              document.getElementById("recv").innerHTML = "connect to 192.168.1.104:8089 successed";
@@ -40,6 +45,26 @@
              websocket.send(txt);
          }
 
+         function sendFile(){
+            var inputElement = document.getElementById("file");
+            var fileList = inputElement.files;
+            var file=fileList[0];
+            if(!file) return;
+            var reader = new FileReader();
+            // reader.readAsText(file, "utf-8");
+            reader.readAsArrayBuffer(file);//以二进制形式读取文件
+            //文件读取完毕后该函数响应
+            reader.onload = function loaded(evt) {
+                var ext = file.name.split(".")[1];
+                // websocket.send("fileUpload|"+ext+"|");
+                // var blob = new Blob([evt.target.result], { extension: ext });
+                var blob = evt.target.result;
+                console.log(blob);
+                websocket.send(blob);//发送二进制表示的文件
+                console.log("finnish");
+            };
+            // inputElement.outerHTML=inputElement.outerHTML; //清空<input type="file">的值
+        }
 
 
      </script>
