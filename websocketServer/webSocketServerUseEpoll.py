@@ -46,7 +46,7 @@ class webSocketServer(object):
                                 if frameOpCode == 0:
                                     self.closeConnect(sock)
                                 elif frameOpCode == 1:
-                                    print("数据为：", message)
+                                    # print("数据为：", message)
                                     try:#这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
                                         message = self.parseStrToJson(message.decode("utf-8"))
                                         self.accordActionToSend(sock, message)#根据获取到的json数据，然后对应操作处理的逻辑
@@ -57,8 +57,8 @@ class webSocketServer(object):
                                 elif frameOpCode == 3:
                                     print("解析数据帧错误")
                                 elif frameOpCode == 5:
-                                    print("文件二进制数据流为：", message)
-                                    ext = "jpeg"
+                                    # print("文件二进制数据流为：", message)
+                                    ext = "txt"
                                     with open(str(int(time.time())) + "." + ext, "wb") as fd:
                                         fd.write(message)
                                     self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成"}'
@@ -163,11 +163,14 @@ class webSocketServer(object):
 
             except IOError as err:
                 if err.errno == 11:  # 发生 Resource temporarily unavailable 错误 错误码为11，意为：数据尚未准备好，需要等待
-                    if getNullTime >= 3:
+                    if getNullTime >= 7:
                         break
                     else:
                         getNullTime = getNullTime + 1
                         print("第" + str(getNullTime) + "次获取到空数据，继续尝试中.......")
+                        time.sleep(0.1)
+                    # getNullTime = getNullTime + 1
+                    # print("第" + str(getNullTime) + "次获取到空数据，继续尝试中.......")
                 else:
                     print("读取数据，未知IO错误")
                     self.epollHandle.modify(sockHandle, select.EPOLLHUP | select.EPOLLET)
