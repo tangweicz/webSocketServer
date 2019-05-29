@@ -9,6 +9,7 @@ class webSocketServer(object):
     dictSocketShakeHandStatus = {} #用于存放每一个socket的握手状态，没有握手或握手失败为False、握手成功为True
     dictSocketShakeHandKey = {} #用于存放每一个socket的握手需要的key值
     dictRoom = {}#用于存放连接上来的socket在哪个房间的字典。比如 "room1":[{"socketHandle":socket1,"prepareStatus":status}, {"socketHandle":socket2,"prepareStatus":status}]。每次有一个socket连接上来，第一时间将该信息发送给该连接。
+    dictSocketFrame = {}
 
     def __init__(self, ipAddr, port):#初始化一个socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -26,12 +27,14 @@ class webSocketServer(object):
                 if event == select.EPOLLIN:  # 有可读事件
                     if sock == self.sock.fileno():
                         client, address = self.sock.accept()
-                        client.setblocking(False)
+                        client.setblocking(True)
+                        client.settimeout(1)
                         self.dictSocketShakeHandStatus[client.fileno()] = False
                         self.dictSocketHandle[client.fileno()] = client
                         self.epollHandle.register(client.fileno(), select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
                     else:
                         message = self.recvMessage(sock)
+                        # print("接收到的数据：", message)
                         if message:
                             if not self.dictSocketShakeHandStatus[sock]:
                                 message = self.decodeToUtf8(message)
@@ -42,7 +45,9 @@ class webSocketServer(object):
                             else:
                                 # print("拿到的数据为：", message)
                                 frameOpCode = self.parseFrameOpCode(message)#解析数据帧中的opcode，确定客户端的请求到底是啥
+                                # frameOpCode = self.dictSocketFrame[sock]
                                 message = self.parseWebSocketData(message)  # 拿到客户端输入的数据，每次都要解包
+                                # print("解包得到的数据为：", message)
                                 if frameOpCode == 0:
                                     self.closeConnect(sock)
                                 elif frameOpCode == 1:
@@ -57,8 +62,8 @@ class webSocketServer(object):
                                 elif frameOpCode == 3:
                                     print("解析数据帧错误")
                                 elif frameOpCode == 5:
-                                    # print("文件二进制数据流为：", message)
-                                    ext = "txt"
+                                    print("文件二进制数据流大小为：", len(message))
+                                    ext = "jpeg"
                                     with open(str(int(time.time())) + "." + ext, "wb") as fd:
                                         fd.write(message)
                                     self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成"}'
@@ -70,8 +75,8 @@ class webSocketServer(object):
                         self.sendMessage(sock, "shakeSuccess")
                     else:
 
-                        print(self.dictSocketHandleSendContent)
-                        print("xxxxxxxxx"+str(sock))
+                        # print(self.dictSocketHandleSendContent)
+                        # print("xxxxxxxxx"+str(sock))
                         self.sendMessage(sock, self.parseDictToJson(self.dictSocketHandleSendContent[sock]))
                         self.dictSocketHandleSendContent.pop(sock)
                     self.epollHandle.modify(sock, select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
@@ -143,44 +148,52 @@ class webSocketServer(object):
                     print("服务端发送数据未知错误")
 
     def recvMessage(self, sockHandle):#读取来自客户端的数据
+
         strings = b""
-        getNullTime = 0
         client = self.dictSocketHandle[sockHandle]
-        num = 1
-        totalLen = 0
         while True:
             try:
-                print("第"+str(num)+"次读取数据")
-                data = client.recv(1024)  # 这儿如果没有拿够1024个字节的数据，那么会循环回来拿，但是，如果发现没有数据能拿到，socket会自动中止，扔出一个异常，代码就结束执行，所以需要try一下。
-                print(len(data))
-                totalLen += len(data)
+                data = client.recv(10240)  # 这儿如果没有拿够1024个字节的数据，那么会循环回来拿，但是，如果发现没有数据能拿到，socket会自动中止，扔出一个异常，代码就结束执行，所以需要try一下。
                 if len(data) == 0:  # 通道断开或者close之后，就会一直收到空字符串。 而不是所谓的-1 或者报异常。这个跟C 和java等其他语言很不一样。
                     self.epollHandle.modify(sockHandle, select.EPOLLHUP | select.EPOLLET)
                     break
-                # print("本次接收到的数据........", data)
+
                 strings = strings + data
-                getNullTime = 0
+                message = strings  # 为了防止无限期读下去，所以在接收数据的同时就开始解析数据
+                if not self.dictSocketShakeHandStatus[sockHandle]:
+                    try:
+                        message = self.decodeToUtf8(message)
+                        if message.endswith("\r\n\r\n"):
+                            break
+                    except:
+                        continue
+                else:
+                    try:
+                        if sockHandle in self.dictSocketFrame:
+                            frameOpCode = self.dictSocketFrame[sockHandle]
+                        else:
+                            frameOpCode = self.parseFrameOpCode(message)
+                            self.dictSocketFrame[sockHandle] = frameOpCode
+                        if frameOpCode == 1:
+                            messages = self.parseWebSocketData(message)  # 拿到客户端输入的数据，每次都要解包
+                            messages = self.decodeToUtf8(messages)
+                            jsonMessage = json.loads(messages)
+                            if jsonMessage["status"] == "1":
+                                break
+                    except:
+                        continue
 
             except IOError as err:
                 if err.errno == 11:  # 发生 Resource temporarily unavailable 错误 错误码为11，意为：数据尚未准备好，需要等待
-                    if getNullTime >= 7:
-                        break
-                    else:
-                        getNullTime = getNullTime + 1
-                        print("第" + str(getNullTime) + "次获取到空数据，继续尝试中.......")
-                        time.sleep(0.1)
-                    # getNullTime = getNullTime + 1
-                    # print("第" + str(getNullTime) + "次获取到空数据，继续尝试中.......")
+                    continue
                 else:
-                    print("读取数据，未知IO错误")
-                    self.epollHandle.modify(sockHandle, select.EPOLLHUP | select.EPOLLET)
+                    print("捕获到数据传输超时")
                     break
             except:
                 print("未知错误")
                 self.epollHandle.modify(sockHandle, select.EPOLLHUP | select.EPOLLET)
                 break
-            num += 1
-        print("数据总长度", totalLen)
+        # print("数据总长度", totalLen)
         return strings
 
     def parseHeaderData(self, headerData):  # 解析头数据，分析出sec-websocket-key字段，然后返回
