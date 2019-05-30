@@ -28,7 +28,7 @@ class webSocketServer(object):
                     if sock == self.sock.fileno():
                         client, address = self.sock.accept()
                         client.setblocking(True)
-                        client.settimeout(1)
+                        client.settimeout(0.1)
                         self.dictSocketShakeHandStatus[client.fileno()] = False
                         self.dictSocketHandle[client.fileno()] = client
                         self.epollHandle.register(client.fileno(), select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
@@ -218,7 +218,7 @@ class webSocketServer(object):
         # print(self.dictSocketHandle)
         # print("***************")
         for everySock in self.dictSocketHandle.values():
-            print(everySock)
+            # print(everySock)
             if not sock == everySock:
                 self.dictSocketHandleSendContent[everySock.fileno()] = '{"status":"success", "message":"have ' + str(len(self.dictSocketHandle)) + ' socket connect"}'
                 self.epollHandle.modify(everySock, select.EPOLLOUT | select.EPOLLET)
@@ -229,7 +229,7 @@ class webSocketServer(object):
             print('Client closed connection.')
             return 0
         tmpData = frame[0]#[0]取一个字节byte的数据（8bit）的数据，即取出opcode
-        print("帧为：", tmpData)
+        # print("帧为：", tmpData)
         if not tmpData:
             print('Client closed connection.')
             return 3
