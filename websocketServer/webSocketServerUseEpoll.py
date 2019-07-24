@@ -10,6 +10,8 @@ class webSocketServer(object):
     dictSocketShakeHandKey = {} #用于存放每一个socket的握手需要的key值
     dictRoom = {}#用于存放连接上来的socket在哪个房间的字典。比如 "room1":[{"socketHandle":socket1,"prepareStatus":status}, {"socketHandle":socket2,"prepareStatus":status}]。每次有一个socket连接上来，第一时间将该信息发送给该连接。
     dictSocketFrame = {}
+    listClosingSocketHandle = [] #正在关闭的socket句柄
+    dictSocketContent = {}#存放需要切片的socket的数据
 
     def __init__(self, ipAddr, port):#初始化一个socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -27,61 +29,61 @@ class webSocketServer(object):
                 if event == select.EPOLLIN:  # 有可读事件
                     if sock == self.sock.fileno():
                         client, address = self.sock.accept()
-                        client.setblocking(True)
-                        client.settimeout(0.1)
+                        client.setblocking(False)
+                        # client.settimeout(0.1)
                         self.dictSocketShakeHandStatus[client.fileno()] = False
                         self.dictSocketHandle[client.fileno()] = client
-                        self.epollHandle.register(client.fileno(), select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
+                        self.epollHandle.register(client.fileno(), select.EPOLLIN |select.EPOLLET)  # |select.EPOLLET
                     else:
                         message = self.recvMessage(sock)
                         # print("接收到的数据：", message)
                         if message:
                             if not self.dictSocketShakeHandStatus[sock]:
-                                message = self.decodeToUtf8(message)
+                                message = self.decodeToUtf8(message["string"])
                                 headerData = self.parseHeaderData(message)  # 解析header头数据
                                 if headerData:
                                     self.dictSocketShakeHandKey[sock] = headerData
                                     self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
                             else:
-                                # print("拿到的数据为：", message)
-                                frameOpCode = self.parseFrameOpCode(message)#解析数据帧中的opcode，确定客户端的请求到底是啥
-                                # frameOpCode = self.dictSocketFrame[sock]
-                                message = self.parseWebSocketData(message)  # 拿到客户端输入的数据，每次都要解包
-                                # print("解包得到的数据为：", message)
-                                if frameOpCode == 0:
-                                    self.closeConnect(sock)
-                                elif frameOpCode == 1:
-                                    # print("数据为：", message)
-                                    try:#这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
-                                        message = self.parseStrToJson(message.decode("utf-8"))
-                                        self.accordActionToSend(sock, message)#根据获取到的json数据，然后对应操作处理的逻辑
-                                    except Exception as err:
+                                if message["type"] == 1:
+                                    try:  # 这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
+                                        data = self.parseStrToJson(message["string"].decode("utf-8"))
+                                        self.accordActionToSend(sock, data)  # 根据获取到的json数据，然后对应操作处理的逻辑
+                                    except:
                                         self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
-                                    # self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
+
                                     self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
-                                elif frameOpCode == 3:
-                                    print("解析数据帧错误")
-                                elif frameOpCode == 5:
-                                    print("文件二进制数据流大小为：", len(message))
+                                elif message["type"] == 8:
+                                    self.epollHandle.modify(sock, select.EPOLLHUP | select.EPOLLET)  # |select.EPOLLET
+                                elif message["type"] == -10:
+                                    pass
+                                elif message["type"] == -11:
+                                    print("数据未传输完毕，分片接收完毕，不作处理")
+                                    # self.epollHandle.modify(sock, select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
+                                    self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"数据分片接收完毕", "dataLen":"'+str(len(self.dictSocketContent[sock]))+'"}'
+                                    self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
+                                elif message["type"] == 2:
+                                    print("数据已传输完毕，保存文件")
                                     ext = "jpeg"
                                     with open(str(int(time.time())) + "." + ext, "wb") as fd:
-                                        fd.write(message)
-                                    self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成"}'
+                                        fd.write(message["string"])
+                                    self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成", "dataLen":"'+str(len(self.dictSocketContent[sock]))+'"}'
+                                    self.dictSocketContent.pop(sock)
                                     self.epollHandle.modify(sock, select.EPOLLOUT | select.EPOLLET)  # |select.EPOLLET
                                 else:
-                                    print("解析数据帧暂时不用的状态")
+                                    print("opCode为", message["type"], "不做任何处理")
+                                    pass
                 elif event == select.EPOLLOUT:  # 可写事件
                     if not self.dictSocketShakeHandStatus[sock]:
                         self.sendMessage(sock, "shakeSuccess")
                     else:
-
-                        # print(self.dictSocketHandleSendContent)
-                        # print("xxxxxxxxx"+str(sock))
                         self.sendMessage(sock, self.parseDictToJson(self.dictSocketHandleSendContent[sock]))
                         self.dictSocketHandleSendContent.pop(sock)
                     self.epollHandle.modify(sock, select.EPOLLIN | select.EPOLLET)  # |select.EPOLLET
                 elif event == select.EPOLLHUP:#客户端断开事件
                     print("socket is closed " + str(sock))
+                    sock.close()
+                    self.dictSocketShakeHandStatus.pop(sock)
                     self.dictSocketHandle[sock].close()
                     self.epollHandle.unregister(sock)
                     self.dictSocketHandle.pop(sock)
@@ -148,53 +150,168 @@ class webSocketServer(object):
                     print("服务端发送数据未知错误")
 
     def recvMessage(self, sockHandle):#读取来自客户端的数据
-
+        print("请求开始")
         strings = b""
+        resDict = {}
         client = self.dictSocketHandle[sockHandle]
-        while True:
-            try:
-                data = client.recv(10240)  # 这儿如果没有拿够1024个字节的数据，那么会循环回来拿，但是，如果发现没有数据能拿到，socket会自动中止，扔出一个异常，代码就结束执行，所以需要try一下。
-                if len(data) == 0:  # 通道断开或者close之后，就会一直收到空字符串。 而不是所谓的-1 或者报异常。这个跟C 和java等其他语言很不一样。
-                    self.epollHandle.modify(sockHandle, select.EPOLLHUP | select.EPOLLET)
-                    break
-
-                strings = strings + data
-                message = strings  # 为了防止无限期读下去，所以在接收数据的同时就开始解析数据
-                if not self.dictSocketShakeHandStatus[sockHandle]:
-                    try:
-                        message = self.decodeToUtf8(message)
-                        if message.endswith("\r\n\r\n"):
-                            break
-                    except:
-                        continue
-                else:
-                    try:
-                        if sockHandle in self.dictSocketFrame:
-                            frameOpCode = self.dictSocketFrame[sockHandle]
-                        else:
-                            frameOpCode = self.parseFrameOpCode(message)
-                            self.dictSocketFrame[sockHandle] = frameOpCode
-                        if frameOpCode == 1:
-                            messages = self.parseWebSocketData(message)  # 拿到客户端输入的数据，每次都要解包
-                            messages = self.decodeToUtf8(messages)
-                            jsonMessage = json.loads(messages)
-                            if jsonMessage["status"] == "1":
-                                break
-                    except:
-                        continue
-
-            except IOError as err:
-                if err.errno == 11:  # 发生 Resource temporarily unavailable 错误 错误码为11，意为：数据尚未准备好，需要等待
-                    continue
-                else:
-                    print("捕获到数据传输超时")
-                    break
-            except:
-                print("未知错误")
+        if not self.dictSocketShakeHandStatus[sockHandle]:#如果没有握手完成，我用1024个字节去接收数据是完全够用的
+            print("握手未完成，去握手")
+            data = client.recv(1024)  # 这儿如果没有拿够1024个字节的数据，那么会循环回来拿，但是，如果发现没有数据能拿到，socket会自动中止，扔出一个异常，代码就结束执行，所以需要try一下。
+            if len(data) == 0:  # 通道断开或者close之后，就会一直收到空字符串。 而不是所谓的-1 或者报异常。这个跟C 和java等其他语言很不一样。
                 self.epollHandle.modify(sockHandle, select.EPOLLHUP | select.EPOLLET)
-                break
-        # print("数据总长度", totalLen)
-        return strings
+            strings = data
+            optCode = -5
+            print("新连接句柄", client.fileno())
+        else: #如果已经握手完成了，那么先要去完成一次通讯由客户端告知服务端，下一次要发送的数据大小
+
+            if not client.fileno() in self.listClosingSocketHandle:#当前操作的socket不是处于正在关闭的状态，那么可以正常获取数据，如果处于正在关闭的状态，等待关闭
+
+                print("句柄为", client.fileno())
+                bytes_list = bytearray('', encoding='utf-8')
+
+                data_head = client.recv(1)#获取一个字节的数据
+                data_head = struct.unpack("B", data_head)[0]#unpack这个字节的数据
+
+                FIN = data_head & 0x80
+
+                opCode = self.parseHeadData(data_head)
+                if opCode == 8:
+                    self.listClosingSocketHandle.append(client.fileno())
+                    return {"type": 8, "string": ""}
+
+                if FIN == 0:
+                    if opCode == 1:
+                        print("----------------------文本消息，传输尚未完成")
+                    elif opCode == 2:
+                        print("----------------------二进制数据，传输尚未完成")
+                    elif opCode == 0:
+                        print("----------------------数据分片，传输尚未完成")
+                    else:
+                        print("----------------------数据尚未完成，opCode为：", opCode)
+                else:
+                    if opCode == 1:
+                        print("----------------------文本消息，传输已完成")
+                    elif opCode == 2:
+                        print("----------------------二进制数据，传输已完成")
+                    elif opCode == 0:
+                        print("----------------------数据分片，传输已完成")
+                    else:
+                        print("----------------------传输已完成，opCode为：", opCode)
+
+                byteData = client.recv(1)#再获取一个字节的数据
+                byteData = struct.unpack("B", byteData)[0]#unpack这个字节的数据
+                payload_len = byteData & 127#根据这个字节的后7位，这个数字只可能 小于126 等于126 等于127 这三种情况。
+                                            # 小于126代表后面的数据长度为dataLength
+                                            # 等于126代表后面的2个字节（16位无符号整数的十进制的值为dataLength）
+                                            # 等于127代表后面的8个字节（64位无符号证书的十进制的值为dataLength）
+                                            # mask key 是固定的后四字节
+                print("payloadLen", payload_len)
+
+                if payload_len == 126:
+                    extend_payload_len = client.recv(2)  # 数据头部延伸的长度
+                    dataLength = struct.unpack("!H", extend_payload_len)[0]#因为是2个字节 所以用H解码
+                    mask = client.recv(4)  # 加密的4个字节
+
+                    recvLen = 0
+                    print("接收到的数据长度为：", dataLength)
+                    while recvLen < dataLength:
+                        try:
+                            data = client.recv(1024)
+                            for i in range(len(data)):
+                                chunk = data[i] ^ mask[i % 4]
+                                bytes_list.append(chunk)
+                            recvLen = recvLen + len(data)
+                        except IOError as e:
+                            if e.errno == 11:
+                                print("yyyyyyyyyyy")
+                                time.sleep(1)
+                                pass
+
+                    if FIN == 0:#如果数据接收尚未完成（数据切片的情况下）
+                        if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
+                            self.dictSocketContent[client.fileno()] = self.dictSocketContent[client.fileno()] + bytes_list
+                        else:
+                            self.dictSocketContent[client.fileno()] = bytes_list
+
+                    else:#如果已经接收完成了
+                        if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
+                            self.dictSocketContent[client.fileno()] = self.dictSocketContent[client.fileno()] + bytes_list
+                        else:
+                            self.dictSocketContent[client.fileno()] = bytes_list
+
+
+                    print("数据总大小", dataLength, "获取数据长度", recvLen)#, "获取到数据：", bytes_list)
+                elif payload_len == 127:
+                    extend_payload_len = client.recv(8)
+                    dataLength = struct.unpack("!Q", extend_payload_len)[0]#因为是8个字节 所以用Q解码
+                    mask = client.recv(4)
+
+                    recvLen = 0
+                    print("接收到的数据长度为：", dataLength)
+                    while recvLen < dataLength:
+                        try:
+                            data = client.recv(1024)
+                            for i in range(len(data)):
+                                chunk = data[i] ^ mask[i % 4]
+                                bytes_list.append(chunk)
+                            recvLen = recvLen + len(data)
+                        except IOError as e:
+                            if e.errno == 11:
+                                print("xxxxxxxxxxx")
+                                time.sleep(1)
+                                continue
+
+                    if FIN == 0:#如果数据接收尚未完成（数据切片的情况下）
+                        if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
+                            self.dictSocketContent[client.fileno()] = self.dictSocketContent[client.fileno()] + bytes_list
+                        else:
+                            self.dictSocketContent[client.fileno()] = bytes_list
+                    else:#如果已经接收完成了
+                        if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
+                            self.dictSocketContent[client.fileno()] = self.dictSocketContent[client.fileno()] + bytes_list
+                        else:
+                            self.dictSocketContent[client.fileno()] = bytes_list
+
+                    print("数据总大小", dataLength, "获取数据长度", recvLen)#, "获取到数据：", bytes_list)
+                else:
+                    dataLength = payload_len
+                    mask = client.recv(4)
+
+                    recvLen = 0
+                    print("接收到的数据长度为：", dataLength)
+                    while recvLen < dataLength:
+                        try:
+                            data = client.recv(1024)
+                            for i in range(len(data)):
+                                chunk = data[i] ^ mask[i % 4]
+                                bytes_list.append(chunk)
+                            recvLen = recvLen + len(data)
+                        except IOError as e:
+                            if e.errno == 11:
+                                print("xxxxxxxxxxx")
+                                time.sleep(1)
+                                continue
+
+                    self.dictSocketContent[client.fileno()] = bytes_list
+
+                if FIN == 0:
+                    strings = ""
+                    optCode = -11
+                else:
+                    strings = self.dictSocketContent[client.fileno()]
+                    optCode = 2
+
+
+            else:
+                print(client.fileno(), "正在关闭")
+                time.sleep(0.1)
+                self.listClosingSocketHandle.remove(client.fileno())
+                optCode = -10
+                strings = ""
+
+        resDict["string"] = strings
+        resDict["type"] = optCode
+        return resDict
 
     def parseHeaderData(self, headerData):  # 解析头数据，分析出sec-websocket-key字段，然后返回
         try:
@@ -214,69 +331,32 @@ class webSocketServer(object):
             return False
 
     def boardCast(self, sock):#广播到所有的连接上
-        # print("已经有" + str(len(self.dictSocketHandle)) + "个socket连接了")
-        # print(self.dictSocketHandle)
-        # print("***************")
         for everySock in self.dictSocketHandle.values():
-            # print(everySock)
             if not sock == everySock:
                 self.dictSocketHandleSendContent[everySock.fileno()] = '{"status":"success", "message":"have ' + str(len(self.dictSocketHandle)) + ' socket connect"}'
                 self.epollHandle.modify(everySock, select.EPOLLOUT | select.EPOLLET)
 
-    def parseFrameOpCode(self, frame):#解析每一次请求过来的数据帧中的opcode，确定客户端现在的要求，返回 0=客户端退出、1=接收到数据、3=错误、4=未知（暂时不用）
-        # print("数据为：", frame)
-        if(frame == b""):#这儿是为了兼容safair浏览器
-            print('Client closed connection.')
-            return 0
-        tmpData = frame[0]#[0]取一个字节byte的数据（8bit）的数据，即取出opcode
-        # print("帧为：", tmpData)
-        if not tmpData:
-            print('Client closed connection.')
-            return 3
-        opcode = tmpData & 0x0f
-        if opcode == 0x8:
-            print('Client asked to close connection.')
-            return 0
+    def parseHeadData(self, head):
+        opcode = head & 0x0f #与00001111进行与运算，其实就是取后四位的数据
         if opcode == 0x0:
-            print('Continuation frames are not supported.')
-            return 4
-        if opcode == 0x2:
-            print('Binary frames 二进制帧上传文件')
-            return 5
-        elif opcode == 0x1:
-            print("message_received")
+            print('数据请求被切片，目前只接收到一个数据分片')
+            return 0
+        if opcode == 0x1:
+            print("文本消息")
             return 1
-        elif opcode == 0x9:
-            print("ping received")
-            return 4
-        elif opcode == 0xa:
-            print('pong frames are not supported.')
-            return 4
-        else:
-            print("Unknown opcode %#x." + str(opcode))
-            return 4
-
-
-    def parseWebSocketData(self, info):#解析头部数据，值要我们的消息主体，剔除掉header头信息
-        payload_len = info[1] & 127
-        if payload_len == 126:
-            extend_payload_len = info[2:4]# 数据头部延伸的长度
-            mask = info[4:8]# 加密的4个字节
-            decoded = info[8:]# 数据
-        elif payload_len == 127:
-            extend_payload_len = info[2:10]
-            mask = info[10:14]
-            decoded = info[14:]
-        else:
-            extend_payload_len = None
-            mask = info[2:6]
-            decoded = info[6:]
-        bytes_list = bytearray()
-        for i in range(len(decoded)):
-            chunk = decoded[i] ^ mask[i % 4]
-            bytes_list.append(chunk)
-        body = bytes_list
-        return body
+        if opcode == 0x2:
+            print('二进制帧上传文件')
+            return 2
+        if opcode == 0x8:
+            print('连接请求断开')
+            return 8
+        if opcode == 0x9:
+            print("ping操作")
+            return 9
+        if opcode == 0xa:
+            print('pong操作')
+            return 10
+        return -1
 
     def packWebSocketData(self, msg_bytes):#打包即将发送的数据
         token = b"\x81"
@@ -285,9 +365,11 @@ class webSocketServer(object):
         if length < 126:
             token += struct.pack("B", length)
         elif length <= 0xFFFF:
-            token += struct.pack("!BH", 126, length)
+            token += struct.pack("B", 126)
+            token += struct.pack("!H", length)
         else:
-            token += struct.pack("!BQ", 127, length)
+            token += struct.pack("B", 127)
+            token += struct.pack("!Q", length)
         msg = token + msg_bytes
         return msg
 

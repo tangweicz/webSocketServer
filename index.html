@@ -25,11 +25,11 @@
              return JSON.parse(jsonStr);
          }
          
-         var websocket = new WebSocket("ws://192.168.1.104:8089/");
+         var websocket = new WebSocket("ws://192.168.6.102:8089/");
          websocket.binaryType = 'arraybuffer';
          websocket.onopen = function(){
              console.log("websocket open");
-             document.getElementById("recv").innerHTML = "connect to 192.168.1.104:8089 successed";
+             document.getElementById("recv").innerHTML = "connect to 192.168.6.102:8089 successed";
          }
          websocket.inclose = function(){
              console.log('websocket close');
@@ -43,6 +43,7 @@
              var txt = document.getElementById("sendTxt").value;
              txt = getJsonStr("getRoomInfo", txt);
              websocket.send(txt);
+             // websocket.send("ceshi")//数据量小的包 不要连续send 会造成粘包
          }
 
          function sendFile(){
@@ -50,16 +51,10 @@
             var fileList = inputElement.files;
             var file=fileList[0];
             if(!file) return;
-
-            if(file.size > 80000){
-                alert("文件超过限制，无法上传");
-                return;
-            }
             var reader = new FileReader();
-            // reader.readAsText(file, "utf-8");
+
             reader.readAsArrayBuffer(file);//以二进制形式读取文件
-            // reader.readAsBinaryString(file);
-            // reader.readAsText(file);
+
             //文件读取完毕后该函数响应
             reader.onload = function loaded(evt) {
                 var ext = file.name.split(".")[1];
@@ -67,6 +62,7 @@
                 // var blob = new Blob([evt.target.result], { extension: ext });
                 var blob = evt.target.result;
                 console.log(blob);
+                // alert(blob.length);
                 websocket.send(blob);//发送二进制表示的文件
             };
             console.log("finish");
