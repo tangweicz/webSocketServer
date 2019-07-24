@@ -46,6 +46,10 @@
              // websocket.send("ceshi")//数据量小的包 不要连续send 会造成粘包
          }
 
+         document.getElementById("close").onclick=function(){
+             websocket.close();
+         }
+
          function sendFile(){
             var inputElement = document.getElementById("file");
             var fileList = inputElement.files;
