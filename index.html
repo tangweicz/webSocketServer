@@ -15,9 +15,21 @@
 
      <div id="recv"></div>
      <script type="text/javascript">
-         
-         function getJsonStr(action, info) {
-             return '{"action":"'+action+'", "info":"'+info+'", "status":"1"}';
+
+
+
+        function sleep(numberMillis) {
+            var now = new Date();
+            var exitTime = now.getTime() + numberMillis;
+            while (true) {
+                now = new Date();
+                if (now.getTime() > exitTime)
+                    return;
+            }
+        }
+
+         function getJsonStr(action, info, status = 1) {
+             return '{"action":"'+action+'", "info":"'+info+'", "status":"'+status+'"}';
          }
 
          function getJsonObj(jsonStr){
@@ -62,15 +74,17 @@
             //文件读取完毕后该函数响应
             reader.onload = function loaded(evt) {
                 var ext = file.name.split(".")[1];
-                // websocket.send("fileUpload|"+ext+"|");
-                // var blob = new Blob([evt.target.result], { extension: ext });
+
                 var blob = evt.target.result;
                 console.log(blob);
                 // alert(blob.length);
+                txt = getJsonStr("getRoomInfo", ext, 2);
+                websocket.send(txt);
+                sleep(1000);//这儿休息0.5秒 是为了防止2次send发生粘包。因为 数据量小的包在很短的时间内发送会造成粘包
                 websocket.send(blob);//发送二进制表示的文件
             };
             console.log("finish");
-            // inputElement.outerHTML=inputElement.outerHTML; //清空<input type="file">的值
+
         }
 
 

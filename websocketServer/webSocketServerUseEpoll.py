@@ -12,6 +12,7 @@ class webSocketServer(object):
     dictSocketFrame = {}
     listClosingSocketHandle = [] #正在关闭的socket句柄
     dictSocketContent = {}#存放需要切片的socket的数据
+    dictSocketRecvFileExtension = {} #用来存放发送文件的时候 文件的后缀名是啥
 
     def __init__(self, ipAddr, port):#初始化一个socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -49,7 +50,11 @@ class webSocketServer(object):
                                     print("数据已传输完毕，纯文本消息")
                                     try:  # 这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
                                         data = self.parseStrToJson(message["string"].decode("utf-8"))
-                                        self.accordActionToSend(sock, data)  # 根据获取到的json数据，然后对应操作处理的逻辑
+                                        if data["status"] == str(2):
+                                            print("确定为上传文件，文件后缀为", data["info"])
+                                            self.dictSocketRecvFileExtension[sock] = data["info"]
+                                            self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"信息接收成功"}'
+                                        # self.accordActionToSend(sock, data)  # 根据获取到的json数据，然后对应操作处理的逻辑
                                     except:
                                         self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
 
@@ -60,12 +65,14 @@ class webSocketServer(object):
                                     pass
                                 elif message["type"] == 2:
                                     print("数据已传输完毕，二进制保存文件")
-                                    ext = "jpeg"
+                                    ext = self.dictSocketRecvFileExtension[sock]
                                     with open(str(int(time.time())) + "." + ext, "wb") as fd:
                                         fd.write(message["string"])
                                     self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成", "dataLen":"'+str(len(self.dictSocketContent[sock]))+'"}'
                                     self.dictSocketContent.pop(sock)
+                                    self.dictSocketRecvFileExtension.pop(sock)
                                     self.epollHandle.modify(sock, select.EPOLLOUT)  # |select.EPOLLET
+
                                 else:
                                     print("opCode为", message["type"], "不做任何处理")
                                     pass
@@ -101,7 +108,7 @@ class webSocketServer(object):
     def parseDictToJson(self, dictData):#将dict解析成json格式
         return json.dumps(dictData)
 
-    def sendMessage(self, sockHandle, message):#用户提交数据的数据
+    def sendMessage(self, sockHandle, message):#用户提交数据的数据，目前发送数据到网页端没有完善，只能发送简短的数据，不支持大文件
         # print("准备发送数据到客户端.....\n")
         client = self.dictSocketHandle[sockHandle]
         if not self.dictSocketShakeHandStatus[sockHandle]:
