@@ -30,7 +30,7 @@ class webSocketServer(object):
                     if sock == self.sock.fileno():
                         client, address = self.sock.accept()
                         client.setblocking(False)
-                        # client.settimeout(0.1)
+                        # client.settimeout(1)
                         self.dictSocketShakeHandStatus[client.fileno()] = False
                         self.dictSocketHandle[client.fileno()] = client
                         self.epollHandle.register(client.fileno(), select.EPOLLIN)  # |select.EPOLLET
@@ -163,10 +163,20 @@ class webSocketServer(object):
 
             if not client.fileno() in self.listClosingSocketHandle:#当前操作的socket不是处于正在关闭的状态，那么可以正常获取数据，如果处于正在关闭的状态，等待关闭
                 while True:
+                    everyRecvDataLen = 512
                     print("句柄为", client.fileno())
                     bytes_list = bytearray('', encoding='utf-8')
 
-                    data_head = client.recv(1)#获取一个字节的数据
+                    while True:
+                        try:
+                            data_head = client.recv(1)#获取一个字节的数据
+                            if len(data_head) >= 1:
+                                break
+                        except IOError as e:
+                            if e.errno == 11:
+                                continue
+
+
                     data_head = struct.unpack("B", data_head)[0]#unpack这个字节的数据
 
                     FIN = data_head & 0x80
@@ -197,7 +207,15 @@ class webSocketServer(object):
                         else:
                             print("----------------------传输已完成，opCode为：", opCode)
 
-                    byteData = client.recv(1)#再获取一个字节的数据
+                    while True:
+                        try:
+                            byteData = client.recv(1)#再获取一个字节的数据
+                            if len(byteData) >= 1:
+                                break
+                        except IOError as e:
+                            if e.errno == 11:
+                                continue
+
                     byteData = struct.unpack("B", byteData)[0]#unpack这个字节的数据
                     payload_len = byteData & 127#根据这个字节的后7位，这个数字只可能 小于126 等于126 等于127 这三种情况。
                                                 # 小于126代表后面的数据长度为dataLength
@@ -207,24 +225,67 @@ class webSocketServer(object):
                     print("payloadLen", payload_len)
 
                     if payload_len == 126:
-                        extend_payload_len = client.recv(2)  # 数据头部延伸的长度
+                        while True:
+                            try:
+                                extend_payload_len = client.recv(2)  # 数据头部延伸的长度
+                                if len(extend_payload_len) >= 2:
+                                    break
+                            except IOError as e:
+                                if e.errno == 11:
+                                    continue
+
+
                         dataLength = struct.unpack("!H", extend_payload_len)[0]#因为是2个字节 所以用H解码
-                        mask = client.recv(4)  # 加密的4个字节
+
+                        while True:
+                            try:
+                                mask = client.recv(4)  # 加密的4个字节
+                                if len(mask) >= 4:
+                                    break
+                            except IOError as e:
+                                if e.errno == 11:
+                                    continue
 
                         recvLen = 0
                         print("接收到的数据长度为：", dataLength)
+
+                        totalTime = int(dataLength / everyRecvDataLen)
+                        print("需要循环%d次去取数据" % (totalTime))
+                        leftLeng = dataLength % everyRecvDataLen
+                        print("最后一次要取%d字节" % (leftLeng))
+                        nowLunCi = 1
+
                         while recvLen < dataLength:
-                            try:
-                                data = client.recv(1024)
-                                for i in range(len(data)):
-                                    chunk = data[i] ^ mask[i % 4]
-                                    bytes_list.append(chunk)
-                                recvLen = recvLen + len(data)
-                            except IOError as e:
-                                if e.errno == 11:
-                                    print("yyyyyyyyyyy")
-                                    time.sleep(1)
-                                    pass
+                            if nowLunCi <= totalTime:
+                                print("第%d次取数据" % (nowLunCi))
+                                try:
+                                    data = client.recv(everyRecvDataLen)
+                                    for i in range(len(data)):
+                                        chunk = data[i] ^ mask[i % 4]
+                                        bytes_list.append(chunk)
+                                    recvLen = recvLen + len(data)
+                                except IOError as e:
+                                    if e.errno == 11:
+                                        print("yyyyyyyyyyy")
+                                        time.sleep(1)
+                                        pass
+                                nowLunCi = nowLunCi + 1
+                            else:
+                                everyRecvDataLen = leftLeng
+                                print("第%d次取数据" % (nowLunCi))
+                                try:
+                                    data = client.recv(everyRecvDataLen)
+                                    for i in range(len(data)):
+                                        chunk = data[i] ^ mask[i % 4]
+                                        bytes_list.append(chunk)
+                                    recvLen = recvLen + len(data)
+                                except IOError as e:
+                                    if e.errno == 11:
+                                        totalTime = totalTime + 1
+                                        print("yyyyyyyyyyy")
+                                        time.sleep(1)
+                                        pass
+                                nowLunCi = nowLunCi + 1
 
                         if FIN == 0:#如果数据接收尚未完成（数据切片的情况下）
                             if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
@@ -241,24 +302,76 @@ class webSocketServer(object):
 
                         print("数据总大小", dataLength, "获取数据长度", recvLen)#, "获取到数据：", bytes_list)
                     elif payload_len == 127:
-                        extend_payload_len = client.recv(8)
+
+                        while True:
+                            try:
+                                extend_payload_len = client.recv(8)
+                                if len(extend_payload_len) >= 8:
+                                    break
+                            except IOError as e:
+                                if e.errno == 11:
+                                    continue
+
                         dataLength = struct.unpack("!Q", extend_payload_len)[0]#因为是8个字节 所以用Q解码
-                        mask = client.recv(4)
+                        while True:
+                            try:
+                                mask = client.recv(4)  # 加密的4个字节
+                                if len(mask) >= 4:
+                                    break
+                            except IOError as e:
+                                if e.errno == 11:
+                                    continue
 
                         recvLen = 0
                         print("接收到的数据长度为：", dataLength)
+
+
+                        totalTime = int(dataLength / everyRecvDataLen)
+                        print("需要循环%d次去取数据"%(totalTime))
+                        leftLeng = dataLength % everyRecvDataLen
+                        print("最后一次要取%d字节" % (leftLeng))
+                        nowLunCi = 1
+
                         while recvLen < dataLength:
-                            try:
-                                data = client.recv(1024)
-                                for i in range(len(data)):
-                                    chunk = data[i] ^ mask[i % 4]
-                                    bytes_list.append(chunk)
-                                recvLen = recvLen + len(data)
-                            except IOError as e:
-                                if e.errno == 11:
-                                    print("xxxxxxxxxxx")
-                                    time.sleep(1)
-                                    continue
+                            if nowLunCi <= totalTime:
+                                print("第%d次取数据"%(nowLunCi))
+                                try:
+                                    data = client.recv(everyRecvDataLen)
+                                    for i in range(len(data)):
+                                        chunk = data[i] ^ mask[i % 4]
+                                        bytes_list.append(chunk)
+
+                                    print("取到的长度为：", len(data))
+                                    recvLen = recvLen + len(data)
+                                except IOError as e:
+                                    if e.errno == 11:
+                                        print("xxxxxxxxxxx")
+                                        totalTime = totalTime + 1
+                                        leftLeng = everyRecvDataLen - len(data)
+                                        time.sleep(1)
+                                        continue
+                                nowLunCi = nowLunCi + 1
+                            else:
+                                everyRecvDataLen = leftLeng
+                                print("第%d次取数据" % (nowLunCi))
+                                try:
+                                    data = client.recv(everyRecvDataLen)
+                                    for i in range(len(data)):
+                                        chunk = data[i] ^ mask[i % 4]
+                                        bytes_list.append(chunk)
+
+                                    print("取到的长度为：", len(data))
+                                    if len(data) == 0:
+                                        time.sleep(1)
+                                    recvLen = recvLen + len(data)
+                                except IOError as e:
+                                    if e.errno == 11:
+                                        totalTime = totalTime + 1
+                                        print("xxxxxxxxxxx")
+                                        time.sleep(1)
+                                        continue
+                                nowLunCi = nowLunCi + 1
+
 
                         if FIN == 0:#如果数据接收尚未完成（数据切片的情况下）
                             if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
@@ -274,7 +387,14 @@ class webSocketServer(object):
                         print("数据总大小", dataLength, "获取数据长度", recvLen)#, "获取到数据：", bytes_list)
                     else:
                         dataLength = payload_len
-                        mask = client.recv(4)
+                        while True:
+                            try:
+                                mask = client.recv(4)  # 加密的4个字节
+                                if len(mask) >= 4:
+                                    break
+                            except IOError as e:
+                                if e.errno == 11:
+                                    continue
 
                         recvLen = 0
                         print("接收到的数据长度为：", dataLength)
