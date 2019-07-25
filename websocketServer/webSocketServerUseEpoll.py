@@ -249,43 +249,30 @@ class webSocketServer(object):
                         recvLen = 0
                         print("接收到的数据长度为：", dataLength)
 
-                        totalTime = int(dataLength / everyRecvDataLen)
-                        print("需要循环%d次去取数据" % (totalTime))
-                        leftLeng = dataLength % everyRecvDataLen
-                        print("最后一次要取%d字节" % (leftLeng))
-                        nowLunCi = 1
-
+                        leftTotalLength = dataLength
                         while recvLen < dataLength:
-                            if nowLunCi <= totalTime:
-                                print("第%d次取数据" % (nowLunCi))
+                            if leftTotalLength < everyRecvDataLen:
                                 try:
-                                    data = client.recv(everyRecvDataLen)
+                                    data = client.recv(leftTotalLength)
                                     for i in range(len(data)):
                                         chunk = data[i] ^ mask[i % 4]
                                         bytes_list.append(chunk)
                                     recvLen = recvLen + len(data)
+                                    leftTotalLength = leftTotalLength - len(data)
                                 except IOError as e:
                                     if e.errno == 11:
-                                        print("yyyyyyyyyyy")
-                                        time.sleep(1)
-                                        pass
-                                nowLunCi = nowLunCi + 1
+                                        continue
                             else:
-                                everyRecvDataLen = leftLeng
-                                print("第%d次取数据" % (nowLunCi))
                                 try:
                                     data = client.recv(everyRecvDataLen)
                                     for i in range(len(data)):
                                         chunk = data[i] ^ mask[i % 4]
                                         bytes_list.append(chunk)
                                     recvLen = recvLen + len(data)
+                                    leftTotalLength = leftTotalLength - len(data)
                                 except IOError as e:
                                     if e.errno == 11:
-                                        totalTime = totalTime + 1
-                                        print("yyyyyyyyyyy")
-                                        time.sleep(1)
-                                        pass
-                                nowLunCi = nowLunCi + 1
+                                        continue
 
                         if FIN == 0:#如果数据接收尚未完成（数据切片的情况下）
                             if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
@@ -323,54 +310,32 @@ class webSocketServer(object):
                                     continue
 
                         recvLen = 0
-                        print("接收到的数据长度为：", dataLength)
-
-
-                        totalTime = int(dataLength / everyRecvDataLen)
-                        print("需要循环%d次去取数据"%(totalTime))
-                        leftLeng = dataLength % everyRecvDataLen
-                        print("最后一次要取%d字节" % (leftLeng))
-                        nowLunCi = 1
-
+                        print("需要接收的数据长度为：", dataLength)
+                        leftTotalLength = dataLength
                         while recvLen < dataLength:
-                            if nowLunCi <= totalTime:
-                                print("第%d次取数据"%(nowLunCi))
+                            if leftTotalLength < everyRecvDataLen:
                                 try:
-                                    data = client.recv(everyRecvDataLen)
+                                    data = client.recv(leftTotalLength)
                                     for i in range(len(data)):
                                         chunk = data[i] ^ mask[i % 4]
                                         bytes_list.append(chunk)
-
-                                    print("取到的长度为：", len(data))
                                     recvLen = recvLen + len(data)
+                                    leftTotalLength = leftTotalLength - len(data)
                                 except IOError as e:
                                     if e.errno == 11:
-                                        print("xxxxxxxxxxx")
-                                        totalTime = totalTime + 1
-                                        leftLeng = everyRecvDataLen - len(data)
-                                        time.sleep(1)
                                         continue
-                                nowLunCi = nowLunCi + 1
                             else:
-                                everyRecvDataLen = leftLeng
-                                print("第%d次取数据" % (nowLunCi))
                                 try:
                                     data = client.recv(everyRecvDataLen)
                                     for i in range(len(data)):
                                         chunk = data[i] ^ mask[i % 4]
                                         bytes_list.append(chunk)
-
-                                    print("取到的长度为：", len(data))
-                                    if len(data) == 0:
-                                        time.sleep(1)
                                     recvLen = recvLen + len(data)
+                                    leftTotalLength = leftTotalLength - len(data)
                                 except IOError as e:
                                     if e.errno == 11:
-                                        totalTime = totalTime + 1
-                                        print("xxxxxxxxxxx")
-                                        time.sleep(1)
                                         continue
-                                nowLunCi = nowLunCi + 1
+
 
 
                         if FIN == 0:#如果数据接收尚未完成（数据切片的情况下）
@@ -407,8 +372,6 @@ class webSocketServer(object):
                                 recvLen = recvLen + len(data)
                             except IOError as e:
                                 if e.errno == 11:
-                                    print("zzzzzzzzzzz")
-                                    time.sleep(1)
                                     continue
                         self.dictSocketContent[client.fileno()] = bytes_list
 
