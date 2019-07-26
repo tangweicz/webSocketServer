@@ -11,7 +11,7 @@
      <button id="close">关闭</button>
 
      <input type="file" name="myfile" id="file" />
-     <button id="sendfile" onclick="sendFile()">发送文件</button>
+     <button id="sendfile" onclick="sendFile()">发送文件</button><!-- 每次点击做个判断 之后 返回成功之后才能再点击  不然会有粘包的问题 因为我最讨厌写前端  这儿我就不写了 -->
 
      <div id="recv"></div>
      <script type="text/javascript">
@@ -80,7 +80,7 @@
                 // alert(blob.length);
                 txt = getJsonStr("getRoomInfo", ext, 2);
                 websocket.send(txt);
-                sleep(1000);//这儿休息0.5秒 是为了防止2次send发生粘包。因为 数据量小的包在很短的时间内发送会造成粘包
+                sleep(1000);//这儿休息1秒 是为了防止2次send发生粘包。因为 数据量小的包在很短的时间内发送会造成粘包
                 websocket.send(blob);//发送二进制表示的文件
             };
             console.log("finish");

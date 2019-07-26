@@ -14,7 +14,7 @@ WS_URL = "ws://192.168.6.102:8089/"
 #定义进程数
 processes=5
 #定义线程数（每个文件可能限制1024个，可以修改fs.file等参数）
-thread_num=1000
+thread_num=2
 
 def on_message(ws, message):
      print(message)
