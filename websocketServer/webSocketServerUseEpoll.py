@@ -53,6 +53,8 @@ class webSocketServer(object):
                                         if data["status"] == str(2):
                                             print("确定为上传文件，文件后缀为", data["info"])
                                             self.dictSocketRecvFileExtension[sock] = data["info"]
+
+                                            self.dictSocketContent.pop(sock)
                                             self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"信息接收成功"}'
                                         else:
                                             self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"信息接收成功"}'
@@ -67,14 +69,13 @@ class webSocketServer(object):
                                     self.epollHandle.unregister(sock)
                                     self.dictSocketHandle.pop(sock)
                                     print("关闭操作完成")
-                                elif message["type"] == -10:
-                                    pass
                                 elif message["type"] == 2:
-                                    print("数据已传输完毕，二进制保存文件")
+                                    print("数据已传输完毕，二进制保存文件", len(message["string"]))
                                     ext = self.dictSocketRecvFileExtension[sock]
-                                    with open(str(int(time.time())) + "." + ext, "wb") as fd:
+                                    filename = str(int(time.time())) + "." + ext
+                                    with open(filename, "wb") as fd:
                                         fd.write(message["string"])
-                                    self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成", "dataLen":"'+str(len(self.dictSocketContent[sock]))+'"}'
+                                    self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成", "dataLen":"'+str(len(self.dictSocketContent[sock]))+'", "filename": "'+filename+'"}'
                                     self.dictSocketContent.pop(sock)
                                     self.dictSocketRecvFileExtension.pop(sock)
                                     self.epollHandle.modify(sock, select.EPOLLOUT)  # |select.EPOLLET
@@ -86,7 +87,14 @@ class webSocketServer(object):
                     if not self.dictSocketShakeHandStatus[sock]:
                         self.sendMessage(sock, "shakeSuccess")
                     else:
-                        self.sendMessage(sock, self.parseDictToJson(self.dictSocketHandleSendContent[sock]))
+
+                        jsonData = json.loads(self.dictSocketHandleSendContent[sock])
+                        if "filename" in jsonData:
+                            self.sendMessage(sock, self.dictSocketHandleSendContent[sock], jsonData["filename"])
+                        else:
+                            print("准备发送数据的类型", type(self.dictSocketHandleSendContent[sock]))
+                            print("准备发送文字消息：", self.dictSocketHandleSendContent[sock])
+                            self.sendMessage(sock, self.parseDictToJson(self.dictSocketHandleSendContent[sock]), "")
                         self.dictSocketHandleSendContent.pop(sock)
                     self.epollHandle.modify(sock, select.EPOLLIN)  # |select.EPOLLET
                 elif event == select.EPOLLHUP:#客户端断开事件
@@ -113,7 +121,7 @@ class webSocketServer(object):
     def parseDictToJson(self, dictData):#将dict解析成json格式
         return json.dumps(dictData)
 
-    def sendMessage(self, sockHandle, message):#用户提交数据的数据，目前发送数据到网页端没有完善，只能发送简短的数据，不支持大文件
+    def sendMessage(self, sockHandle, message, filename = ""):#用户提交数据的数据，目前发送数据到网页端没有完善，只能发送简短的数据，不支持大文件
         # print("准备发送数据到客户端.....\n")
         client = self.dictSocketHandle[sockHandle]
         if not self.dictSocketShakeHandStatus[sockHandle]:
@@ -135,8 +143,15 @@ class webSocketServer(object):
             if len(self.dictSocketHandle) >= 1:  # 一旦新的连接握手成功，这儿就发一个广播，告诉所有连接上来的用户，已经有多少用户在线上
                 self.boardCast(sockHandle)  # 发送广播对象，不包含刚刚连接上来的
         else:
-            # print("已经握过手，直接发送数据......")
-            strings = self.packWebSocketData(message.encode("utf-8"))  # 要发送的数据
+            if filename == "":
+                strings = self.packWebSocketData(message.encode("utf-8"))  # 要发送的数据
+            else:
+                data = b""
+                with open(filename, "rb") as fd:
+                    data += fd.read()
+                print("要发送二进制文件总大小:", len(data))
+                strings = self.packWebSocketData(data)
+                print("要发送打包后的数据大小", len(strings))
         totalLen = len(strings)  # 要发送数据的总长度
         sendLen = 0  # 已发送数据总长度
         while sendLen < totalLen:  # 开始循环发送数据
@@ -147,10 +162,14 @@ class webSocketServer(object):
                 m = strings[sendLen:]
                 # print("mmmmmmmmmmmm", m)
                 le = client.send(m)
+                print("本次发送数据量:", le)
                 sendLen = sendLen + le
+                print("已发送数据总量：", sendLen)
                 # print("已发送数据总长度：", sendLen)
             except IOError as err:
-                if err.errno == 32:  # 如果对端关闭，还去发送会产生，"Broken pipe"的错误  错误码为32
+                if err.errno == 11:
+                    continue
+                elif err.errno == 32:  # 如果对端关闭，还去发送会产生，"Broken pipe"的错误  错误码为32
                     # print("客户端已经关闭连接，服务端等待关闭......")
                     self.epollHandle.modify(sockHandle, select.EPOLLHUP)
                     break
@@ -394,13 +413,6 @@ class webSocketServer(object):
                     strings = self.dictSocketContent[client.fileno()]
                     optCode = globalOptCode
                     break
-            # else:
-            #     print(client.fileno(), "正在关闭")
-            #     time.sleep(0.01)#这儿是为了等待关闭
-            #     self.listClosingSocketHandle.remove(client.fileno())
-            #     optCode = -10
-            #     strings = ""
-
         resDict["string"] = strings
         resDict["type"] = optCode
         return resDict
@@ -451,15 +463,18 @@ class webSocketServer(object):
         return -1
 
     def packWebSocketData(self, msg_bytes):#打包即将发送的数据
-        token = b"\x81"
+
         length = len(msg_bytes)
         # 打包规则
         if length < 126:
+            token = struct.pack("B", 129)
             token += struct.pack("B", length)
         elif length <= 0xFFFF:
+            token = struct.pack("B", 129)
             token += struct.pack("B", 126)
             token += struct.pack("!H", length)
         else:
+            token = struct.pack("B", 130)
             token += struct.pack("B", 127)
             token += struct.pack("!Q", length)
         msg = token + msg_bytes

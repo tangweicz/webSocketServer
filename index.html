@@ -5,7 +5,6 @@
      <title>WebSocket</title>
  </head>
  <body>
-     <h1>websocket连接并发送数据</h1>
      <input type="text" id="sendTxt">
      <button id="sendBtn">发送</button>
      <button id="close">关闭</button>
@@ -14,9 +13,8 @@
      <button id="sendfile" onclick="sendFile()">发送文件</button><!-- 每次点击做个判断 之后 返回成功之后才能再点击  不然会有粘包的问题 因为我最讨厌写前端  这儿我就不写了 -->
 
      <div id="recv"></div>
+     <div id="imgDiv"> <img id="img1" style="width:400px;height:200px;display:none;"></div>
      <script type="text/javascript">
-
-
 
         function sleep(numberMillis) {
             var now = new Date();
@@ -42,15 +40,35 @@
          websocket.onopen = function(){
              console.log("websocket open");
              document.getElementById("recv").innerHTML = "connect to 192.168.6.102:8089 successed";
-         }
+         };
          websocket.inclose = function(){
              console.log('websocket close');
+         };
+         websocket.onmessage = function(evt){
+             console.log(evt.data);
+             if(typeof evt.data == "string"){
+                 console.log("是json");
+                 console.log(evt.data);
+                 var jsonObj = getJsonObj(evt.data);
+                 document.getElementById("recv").innerHTML = jsonObj.status+":"+jsonObj.message;
+             }else{
+                 console.log("二进制流文件");
+                var blob = new Blob([evt.data],{"type":"image\/jpeg"});
+                var src = window.URL.createObjectURL(blob);
+                var img = document.getElementById('img1');
+                img.src = src;
+                img.style.display = "block";
+                img.onload = function(){
+                    window.URL.revokeObjectURL(src);
+                };
+                document.body.appendChild(img);
+
+
+
+             }
          }
-         websocket.onmessage = function(e){
-             console.log(e.data);
-             var jsonObj = getJsonObj(e.data);
-             document.getElementById("recv").innerHTML = jsonObj.status+":"+jsonObj.message;
-         }
+
+
          document.getElementById("sendBtn").onclick=function(){
              var txt = document.getElementById("sendTxt").value;
              txt = getJsonStr("getRoomInfo", txt);
