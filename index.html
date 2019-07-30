@@ -2,7 +2,7 @@
  <html lang="en">
  <head>
      <meta charset="UTF-8">
-     <title>WebSocket</title>
+     <title>websocket的客户端</title>
  </head>
  <body>
      <input type="text" id="sendTxt">
@@ -62,11 +62,8 @@
                     window.URL.revokeObjectURL(src);
                 };
                 document.body.appendChild(img);
-
-
-
              }
-         }
+         };
 
 
          document.getElementById("sendBtn").onclick=function(){
@@ -74,11 +71,11 @@
              txt = getJsonStr("getRoomInfo", txt);
              websocket.send(txt);
              // websocket.send("ceshi")//数据量小的包 不要连续send 会造成粘包
-         }
+         };
 
          document.getElementById("close").onclick=function(){
              websocket.close();
-         }
+         };
 
          function sendFile(){
             var inputElement = document.getElementById("file");

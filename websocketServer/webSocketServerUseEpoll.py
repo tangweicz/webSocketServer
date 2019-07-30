@@ -75,7 +75,10 @@ class webSocketServer(object):
                                     filename = str(int(time.time())) + "." + ext
                                     with open(filename, "wb") as fd:
                                         fd.write(message["string"])
-                                    self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成", "dataLen":"'+str(len(self.dictSocketContent[sock]))+'", "filename": "'+filename+'"}'
+                                    if ext in ["png", "jpg", "jpeg", "gif"]:
+                                        self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成", "dataLen":"'+str(len(self.dictSocketContent[sock]))+'", "filename": "'+filename+'"}'
+                                    else:
+                                        self.dictSocketHandleSendContent[sock] = '{"status":"success", "message":"文件传输完成", "dataLen":"' + str(len(self.dictSocketContent[sock])) + '"}'
                                     self.dictSocketContent.pop(sock)
                                     self.dictSocketRecvFileExtension.pop(sock)
                                     self.epollHandle.modify(sock, select.EPOLLOUT)  # |select.EPOLLET
@@ -201,11 +204,15 @@ class webSocketServer(object):
                 while True:
                     try:
                         data_head = client.recv(1)#获取一个字节的数据
+                        if len(data_head) == 0:#如果在接收数据过程中，客户端突然关闭，那么就会接收到空数据，然后根据空数据去断开连接，这点至关重要
+                            raise RuntimeError()
                         if len(data_head) >= 1:
                             break
                     except IOError as e:
                         if e.errno == 11:
                             continue
+                    except RuntimeError as re:
+                        self.epollHandle.modify(client, select.EPOLLHUP)
 
 
                 data_head = struct.unpack("B", data_head)[0]#unpack这个字节的数据
@@ -241,11 +248,15 @@ class webSocketServer(object):
                 while True:
                     try:
                         byteData = client.recv(1)#再获取一个字节的数据
+                        if len(byteData) == 0:
+                            raise RuntimeError()
                         if len(byteData) >= 1:
                             break
                     except IOError as e:
                         if e.errno == 11:
                             continue
+                    except RuntimeError as re:
+                        self.epollHandle.modify(client, select.EPOLLHUP)
 
                 byteData = struct.unpack("B", byteData)[0]#unpack这个字节的数据
                 payload_len = byteData & 127#根据这个字节的后7位，这个数字只可能 小于126 等于126 等于127 这三种情况。
@@ -259,11 +270,15 @@ class webSocketServer(object):
                     while True:
                         try:
                             extend_payload_len = client.recv(2)  # 数据头部延伸的长度
+                            if len(extend_payload_len) == 0:
+                                raise RuntimeError()
                             if len(extend_payload_len) >= 2:
                                 break
                         except IOError as e:
                             if e.errno == 11:
                                 continue
+                        except RuntimeError as re:
+                            self.epollHandle.modify(client, select.EPOLLHUP)
 
 
                     dataLength = struct.unpack("!H", extend_payload_len)[0]#因为是2个字节 所以用H解码
@@ -271,11 +286,15 @@ class webSocketServer(object):
                     while True:
                         try:
                             mask = client.recv(4)  # 加密的4个字节
+                            if len(mask) == 0:
+                                raise RuntimeError()
                             if len(mask) >= 4:
                                 break
                         except IOError as e:
                             if e.errno == 11:
                                 continue
+                        except RuntimeError as re:
+                            self.epollHandle.modify(client, select.EPOLLHUP)
 
                     recvLen = 0
                     print("接收到的数据长度为：", dataLength)
@@ -285,6 +304,8 @@ class webSocketServer(object):
                         if leftTotalLength < everyRecvDataLen:
                             try:
                                 data = client.recv(leftTotalLength)
+                                if len(data) == 0:
+                                    raise RuntimeError()
                                 for i in range(len(data)):
                                     chunk = data[i] ^ mask[i % 4]
                                     bytes_list.append(chunk)
@@ -293,9 +314,13 @@ class webSocketServer(object):
                             except IOError as e:
                                 if e.errno == 11:
                                     continue
+                            except RuntimeError as re:
+                                self.epollHandle.modify(client, select.EPOLLHUP)
                         else:
                             try:
                                 data = client.recv(everyRecvDataLen)
+                                if len(data) ==0:
+                                    raise RuntimeError()
                                 for i in range(len(data)):
                                     chunk = data[i] ^ mask[i % 4]
                                     bytes_list.append(chunk)
@@ -304,6 +329,8 @@ class webSocketServer(object):
                             except IOError as e:
                                 if e.errno == 11:
                                     continue
+                            except RuntimeError as re:
+                                self.epollHandle.modify(client, select.EPOLLHUP)
 
                     if FIN == 0:#如果数据接收尚未完成（数据切片的情况下）
                         if client.fileno() in self.dictSocketContent:#如果socket字典中已经有该socket了
@@ -324,21 +351,29 @@ class webSocketServer(object):
                     while True:
                         try:
                             extend_payload_len = client.recv(8)
+                            if len(extend_payload_len) == 0:
+                                raise RuntimeError()
                             if len(extend_payload_len) >= 8:
                                 break
                         except IOError as e:
                             if e.errno == 11:
                                 continue
+                        except RuntimeError as re:
+                            self.epollHandle.modify(client, select.EPOLLHUP)
 
                     dataLength = struct.unpack("!Q", extend_payload_len)[0]#因为是8个字节 所以用Q解码
                     while True:
                         try:
                             mask = client.recv(4)  # 加密的4个字节
+                            if len(mask) == 0:
+                                raise RuntimeError()
                             if len(mask) >= 4:
                                 break
                         except IOError as e:
                             if e.errno == 11:
                                 continue
+                        except RuntimeError as re:
+                            self.epollHandle.modify(client, select.EPOLLHUP)
 
                     recvLen = 0
                     print("需要接收的数据长度为：", dataLength)
@@ -347,25 +382,35 @@ class webSocketServer(object):
                         if leftTotalLength < everyRecvDataLen:
                             try:
                                 data = client.recv(leftTotalLength)
+                                if len(data) == 0:
+                                    raise RuntimeError()
                                 for i in range(len(data)):
                                     chunk = data[i] ^ mask[i % 4]
                                     bytes_list.append(chunk)
                                 recvLen = recvLen + len(data)
                                 leftTotalLength = leftTotalLength - len(data)
                             except IOError as e:
+                                print("错误码：", e.errno)
                                 if e.errno == 11:
                                     continue
+                            except RuntimeError as re:
+                                self.epollHandle.modify(client, select.EPOLLHUP)
                         else:
                             try:
                                 data = client.recv(everyRecvDataLen)
+                                if len(data) == 0:
+                                    raise RuntimeError()
                                 for i in range(len(data)):
                                     chunk = data[i] ^ mask[i % 4]
                                     bytes_list.append(chunk)
                                 recvLen = recvLen + len(data)
                                 leftTotalLength = leftTotalLength - len(data)
                             except IOError as e:
+                                print("错误码：", e.errno)
                                 if e.errno == 11:
                                     continue
+                            except RuntimeError as re:
+                                self.epollHandle.modify(client, select.EPOLLHUP)
 
 
 
@@ -386,17 +431,23 @@ class webSocketServer(object):
                     while True:
                         try:
                             mask = client.recv(4)  # 加密的4个字节
+                            if len(mask) == 0:
+                                raise RuntimeError()
                             if len(mask) >= 4:
                                 break
                         except IOError as e:
                             if e.errno == 11:
                                 continue
+                        except RuntimeError as re:
+                            self.epollHandle.modify(client, select.EPOLLHUP)
 
                     recvLen = 0
                     print("接收到的数据长度为：", dataLength)
                     while recvLen < dataLength:
                         try:
                             data = client.recv(1024)
+                            if len(data) == 0:
+                                raise RuntimeError()
                             for i in range(len(data)):
                                 chunk = data[i] ^ mask[i % 4]
                                 bytes_list.append(chunk)
@@ -404,6 +455,8 @@ class webSocketServer(object):
                         except IOError as e:
                             if e.errno == 11:
                                 continue
+                        except RuntimeError as re:
+                            self.epollHandle.modify(client, select.EPOLLHUP)
                     self.dictSocketContent[client.fileno()] = bytes_list
 
                 if FIN == 0:
