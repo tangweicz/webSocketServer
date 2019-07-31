@@ -2,14 +2,14 @@
 python3 webSocketServer
 
 ##### 环境要求：
-    linux。因为是用了select的epoll模式，所以不支持win、macos。\
+    linux。因为是用了select的epoll模式，所以不支持win、macos。
 #####s ocket运行方式：
     socket全程非阻塞方式，epoll为非边缘触发！
 #### 接收数据过程：
 ##### 握手阶段：
     遵从websocket的协议，
     浏览器发起websocket连接，首次（未握手）会发送一个http的头数据包，
-    服务端解析头数据包，得到 Sec-WebSocket-Key 与 258EAFA5-E914-47DA-95CA-C5AB0DC85B11 字符串拼接 然后加密数据返回给浏览器，之后握手完成！\
+    服务端解析头数据包，得到 Sec-WebSocket-Key 与 258EAFA5-E914-47DA-95CA-C5AB0DC85B11 字符串拼接 然后加密数据返回给浏览器，之后握手完成！
 ##### 数据交互阶段：
     解析数据遵从websocket的协议，每一帧数据！
     第一个字节（第一位FIN代表数据是否发送完毕，后四个位opCode数据类型，数据类型自行查找）
