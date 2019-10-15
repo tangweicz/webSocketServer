@@ -35,11 +35,11 @@
              return JSON.parse(jsonStr);
          }
          
-         var websocket = new WebSocket("ws://192.168.6.102:8089/");
+         var websocket = new WebSocket("ws://192.168.6.103:8089/");
          websocket.binaryType = 'arraybuffer';
          websocket.onopen = function(){
              console.log("websocket open");
-             document.getElementById("recv").innerHTML = "connect to 192.168.6.102:8089 successed";
+             document.getElementById("recv").innerHTML = "connect to 192.168.6.103:8089 successed";
          };
          websocket.inclose = function(){
              console.log('websocket close');

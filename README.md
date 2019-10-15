@@ -4,7 +4,7 @@ python3 webSocketServer
 ##### 环境要求：
     linux。因为是用了select的epoll模式，所以不支持win、macos。
 ##### socket运行方式：
-    socket全程非阻塞方式，epoll为非边缘触发！
+    socket全程非阻塞方式，webSocketServerUseEpollET.py为边缘触发方式、webSocketServerUseLT.py为水平触发方式。ET和LT方式，是两种不同的触发方式，代码结构也不一致。
 #### 接收数据过程：
 ##### 握手阶段：
     遵从websocket的协议，
