@@ -514,11 +514,59 @@ class webSocketServer(object):
                                         print(self.dictSocketRecvData[key.fd]["recvDataLength"], "=======", self.dictSocketRecvData[key.fd]["dataLength"])
                                         strings = self.dictSocketContent[client.fileno()]
                                         self.resDict[key.fd]["string"] = strings
-                                        self.resDict[key.fd]["type"] = 1
+                                        self.resDict[key.fd]["type"] = 2
                                         self.dictSocketRecvData.pop(key.fd)
                                         self.dictSocketContent.pop(key.fd)
-                                        self.selector.modify(key.fd, EVENT_WRITE, self.writeable)
 
+
+                                        message = self.resDict[key.fd]
+                                        if message:
+                                            if not self.dictSocketShakeHandStatus[key.fd]:
+                                                message = self.decodeToUtf8(message["string"])
+                                                headerData = self.parseHeaderData(message)  # 解析header头数据
+                                                if headerData:
+                                                    self.dictSocketShakeHandKey[key.fd] = headerData
+                                            else:
+                                                if message["type"] == 1:
+                                                    print("数据已传输完毕，纯文本消息")
+                                                    try:  # 这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
+                                                        data = self.parseStrToJson(message["string"].decode("utf-8"))
+                                                        if data["status"] == str(2):
+                                                            print("确定为上传文件，文件后缀为", data["info"])
+                                                            self.dictSocketRecvFileExtension[key.fd] = data["info"]
+
+                                                            self.dictSocketHandleSendContent[key.fd] = '{"status":"success", "message":"信息接收成功"}'
+                                                        else:
+                                                            self.dictSocketHandleSendContent[key.fd] = '{"status":"success", "message":"信息接收成功"}'
+                                                    except:
+                                                        self.dictSocketHandleSendContent[key.fd] = '{"status":"error", "message":"通讯数据格式错误"}'
+                                                elif message["type"] == 8:
+                                                    print("接收到关闭信息，正在关闭" + str(key.fd))
+                                                    self.dictSocketShakeHandStatus.pop(key.fd)
+                                                    self.dictSocketHandle[key.fd].close()
+                                                    self.epollHandle.unregister(key.fd)
+                                                    self.dictSocketHandle.pop(key.fd)
+                                                    self.dictSocketRecvData.pop(key.fd)
+                                                    print("关闭操作完成")
+                                                elif message["type"] == 2:
+                                                    print("数据已传输完毕，二进制保存文件", len(message["string"]))
+                                                    # ext = self.dictSocketRecvFileExtension[sock]
+                                                    filename = str(int(time.time())) + "." + "jpeg"
+                                                    with open(filename, "wb") as fd:
+                                                        fd.write(message["string"])
+                                                    if "jpeg" in ["png", "jpg", "jpeg", "gif"]:
+                                                        self.dictSocketHandleSendContent[key.fd] = '{"status":"success", "message":"文件传输完成", "filename": "' + filename + '"}'
+                                                    else:
+                                                        self.dictSocketHandleSendContent[key.fd] = '{"status":"success", "message":"文件传输完成"}'
+
+                                                    # self.dictSocketRecvFileExtension.pop(sock)
+
+                                                    self.selector.modify(key.fd, EVENT_WRITE, self.writeable)
+
+                                                else:
+                                                    print("opCode为", message["type"], "不做任何处理")
+                                                    pass
+                                            self.selector.modify(key.fd, EVENT_WRITE, self.writeable)
 
                                 elif self.dictSocketRecvData[key.fd]["opCode"] == 0:
                                     print("正在接收一帧二进制分片数据")
@@ -526,17 +574,76 @@ class webSocketServer(object):
                                         print(self.dictSocketRecvData[key.fd]["recvDataLength"], "=======", self.dictSocketRecvData[key.fd]["dataLength"])
                                         strings = self.dictSocketContent[client.fileno()]
                                         self.resDict[key.fd]["string"] = strings
-                                        self.resDict[key.fd]["type"] = 1
+                                        self.resDict[key.fd]["type"] = 2
                                         self.dictSocketRecvData.pop(key.fd)
                                         self.dictSocketContent.pop(key.fd)
-                                        self.selector.modify(key.fd, EVENT_WRITE, self.writeable)
+
+
+
+                                        message = self.resDict[key.fd]
+                                        if message:
+                                            if not self.dictSocketShakeHandStatus[key.fd]:
+                                                message = self.decodeToUtf8(message["string"])
+                                                headerData = self.parseHeaderData(message)  # 解析header头数据
+                                                if headerData:
+                                                    self.dictSocketShakeHandKey[key.fd] = headerData
+                                            else:
+                                                if message["type"] == 1:
+                                                    try:  # 这儿为什么要try下，因为，如果不是json格式的字符串，不能json.loads所以，要try下
+                                                        data = self.parseStrToJson(message["string"].decode("utf-8"))
+                                                        if data["status"] == str(2):
+                                                            print("确定为上传文件，文件后缀为", data["info"])
+                                                            self.dictSocketRecvFileExtension[key.fd] = data["info"]
+
+                                                            self.dictSocketHandleSendContent[
+                                                                key.fd] = '{"status":"success", "message":"信息接收成功"}'
+                                                        else:
+                                                            self.dictSocketHandleSendContent[
+                                                                key.fd] = '{"status":"success", "message":"信息接收成功"}'
+                                                    except:
+                                                        self.dictSocketHandleSendContent[
+                                                            key.fd] = '{"status":"error", "message":"通讯数据格式错误"}'
+                                                elif message["type"] == 8:
+                                                    print("接收到关闭信息，正在关闭" + str(key.fd))
+                                                    self.dictSocketShakeHandStatus.pop(key.fd)
+                                                    self.dictSocketHandle[key.fd].close()
+                                                    self.epollHandle.unregister(key.fd)
+                                                    self.dictSocketHandle.pop(key.fd)
+                                                    self.dictSocketRecvData.pop(key.fd)
+                                                    print("关闭操作完成")
+                                                elif message["type"] == 2:
+                                                    print("数据已传输完毕，二进制保存文件", len(message["string"]))
+                                                    # ext = self.dictSocketRecvFileExtension[sock]
+                                                    filename = str(int(time.time())) + "." + "jpeg"
+                                                    with open(filename, "wb") as fd:
+                                                        fd.write(message["string"])
+                                                    if "jpeg" in ["png", "jpg", "jpeg", "gif"]:
+                                                        self.dictSocketHandleSendContent[
+                                                            key.fd] = '{"status":"success", "message":"文件传输完成", "filename": "' + filename + '"}'
+                                                    else:
+                                                        self.dictSocketHandleSendContent[
+                                                            key.fd] = '{"status":"success", "message":"文件传输完成"}'
+
+                                                    # self.dictSocketRecvFileExtension.pop(sock)
+
+                                                    self.selector.modify(key.fd, EVENT_WRITE, self.writeable)
+
+                                                else:
+                                                    print("opCode为", message["type"], "不做任何处理")
+                                                    pass
+
+                                            self.selector.modify(key.fd, EVENT_WRITE, self.writeable)
                                 else:
                                     pass
 
 
     def writeable(self, key):
 
+        # print("准备发送数据到客户端.....\n")
+        client = self.dictSocketHandle[key.fd]
+        strings = b""
         if not self.dictSocketShakeHandStatus[key.fd]:
+            # print("发送握手数据到客户端.....")
             dictData = self.dictSocketShakeHandKey[key.fd]
             # print("key", dictData["Sec-WebSocket-Key"])
             keyStr = dictData["Sec-WebSocket-Key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
@@ -547,26 +654,30 @@ class webSocketServer(object):
             # print("sha1", ser_key)
             base64str = base64.b64encode(ser_key).decode("utf-8")
             # print("base64", base64str)
-            strings = "HTTP/1.1 101 Switching Protocol\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept:%s\r\n\r\n" % (base64str)
+            strings = "HTTP/1.1 101 Switching Protocol\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept:%s\r\n\r\n" % (
+                base64str)
             # print(strings)
             strings = strings.encode("utf-8")
-            if not self.dictSocketShakeHandStatus[key.fd]:
-                self.dictSocketShakeHandStatus[key.fd] = True
-            self.selector.modify(key.fd, EVENT_READ, self.readable)
+            self.dictSocketShakeHandKey.pop(key.fd)
+            if len(self.dictSocketHandle) >= 1:  # 一旦新的连接握手成功，这儿就发一个广播，告诉所有连接上来的用户，已经有多少用户在线上
+                self.boardCast(key.fd)  # 发送广播对象，不包含刚刚连接上来的
         else:
-            print(len(self.resDict[key.fd]["string"]))
-            strings = '{"status":"success", "message":"信息接收成功"}'
+
+            jsonData = json.loads(self.dictSocketHandleSendContent[key.fd])
+            filename = ""
+            if "filename" in jsonData:
+                filename = jsonData["filename"]
+
             if not key.fd in self.dictSocketSendHandle:
-                # if filename == "":
-                strings = json.dumps(strings)
-                strings = self.packWebSocketData(strings.encode("utf-8"))  # 要发送的数据
-                # else:
-                #     data = b""
-                #     with open(filename, "rb") as fd:
-                #         data += fd.read()
-                #     print("要发送二进制文件总大小:", len(data))
-                #     strings = self.packWebSocketData(data)
-                #     print("要发送打包后的数据大小", len(strings))
+                if filename == "":
+                    strings = self.packWebSocketData('ceshi'.encode("utf-8"))  # 要发送的数据
+                else:
+                    data = b""
+                    with open(filename, "rb") as fd:
+                        data += fd.read()
+                    print("要发送二进制文件总大小:", len(data))
+                    strings = self.packWebSocketData(data)
+                    print("要发送打包后的数据大小", len(strings))
 
         if not key.fd in self.dictSocketSendHandle:
             self.dictSocketSendHandle[key.fd] = len(strings)  # 要发送数据的总长度
@@ -575,16 +686,12 @@ class webSocketServer(object):
         if not self.dictSocketShakeHandStatus[key.fd]:
             self.dictSocketShakeHandStatus[key.fd] = True
         # print("要发送数据总长度：", totalLen)
-        print("要发送的数据为：", strings)
-        if not key.fd in self.dictSocketSendHandle:
-            self.dictSocketSendHandle[key.fd] = len(strings)  # 要发送数据的总长度
-        if not key.fd in self.dictSocketSendedHandle:
-            self.dictSocketSendedHandle[key.fd] = 0  # 已发送数据总长度
+        print("yyyyy")
 
         while self.dictSocketSendedHandle[key.fd] < self.dictSocketSendHandle[key.fd]:
             try:
                 m = strings[self.dictSocketSendedHandle[key.fd]:]
-                le = self.dictSocketHandle[key.fd].send(m)
+                le = client.send(m)
                 print("本次发送数据量:", le)
                 self.dictSocketSendedHandle[key.fd] = self.dictSocketSendedHandle[key.fd] + le
                 print("已发送数据总量：", self.dictSocketSendedHandle[key.fd])
@@ -597,12 +704,135 @@ class webSocketServer(object):
                     print("写入缓冲区已满")
                     continue
                 else:
+                    print(err.errno)
                     print("服务端发送数据未知错误")
+        # if self.dictSocketSendedHandle[sockHandle] < self.dictSocketSendHandle[sockHandle]:
+        #     if self.dictSocketLeftHandle[sockHandle] < 512:
+        #         try:
+        #             print("开始位置：", self.dictSocketSendHandle[sockHandle])
+        #             m = strings[self.dictSocketSendHandle[sockHandle]:]
+        #             le = client.send(m)
+        #             print("本次发送数据量:", le)
+        #             self.dictSocketSendedHandle[sockHandle] = self.dictSocketSendedHandle[sockHandle] + le
+        #             print("已发送数据总量：", self.dictSocketSendedHandle[sockHandle])
+        #             self.dictSocketLeftHandle[sockHandle] = self.dictSocketLeftHandle[sockHandle] - le
+        #             print("剩余发送数据总量：", self.dictSocketLeftHandle[sockHandle])
+        #
+        #         except IOError as err:
+        #             if err.errno == 32:  # 如果对端关闭，还去发送会产生，"Broken pipe"的错误  错误码为32
+        #                 # print("客户端已经关闭连接，服务端等待关闭......")
+        #                 self.epollHandle.modify(sockHandle, select.EPOLLHUP)
+        #             else:
+        #                 print("服务端发送数据未知错误")
+        #     else:
+        #         try:
+        #             m = strings[self.dictSocketSendHandle[sockHandle]:self.dictSocketSendHandle[sockHandle]+512]
+        #             le = client.send(m)
+        #             print("本次发送数据量:", le)
+        #             self.dictSocketSendedHandle[sockHandle] = self.dictSocketSendedHandle[sockHandle] + le
+        #             print("已发送数据总量：", self.dictSocketSendedHandle[sockHandle])
+        #             self.dictSocketLeftHandle[sockHandle] = self.dictSocketLeftHandle[sockHandle] - le
+        #             print("剩余发送数据总量：", self.dictSocketLeftHandle[sockHandle])
+        #
+        #         except IOError as err:
+        #             if err.errno == 32:  # 如果对端关闭，还去发送会产生，"Broken pipe"的错误  错误码为32
+        #                 # print("客户端已经关闭连接，服务端等待关闭......")
+        #                 self.epollHandle.modify(sockHandle, select.EPOLLHUP)
+        #             else:
+        #                 print("服务端发送数据未知错误")
+
         else:
             self.selector.modify(key.fd, EVENT_READ, self.readable)
             self.dictSocketSendHandle.pop(key.fd)
             self.dictSocketSendedHandle.pop(key.fd)
             print("删掉之前用的socket")
+        # if self.dictSocketSendHandle[sockHandle] == self.dictSocketSendedHandle[sockHandle]:#如果待发送数据总长度等于已发送数据总长度，那么就把socket改成读等待
+        #     self.epollHandle.modify(sockHandle, select.EPOLLIN)
+        #     self.dictSocketSendHandle.pop(sockHandle)
+        #     self.dictSocketSendedHandle.pop(sockHandle)
+        #     print("删掉之前用的socket")
+        # else:
+        #     m = strings[self.dictSocketSendedHandle[sockHandle]:]
+        #     # print("mmmmmmmmmmmm", m)
+        #     le = client.send(m)
+        #     print("本次发送数据量:", le)
+        #     self.dictSocketSendedHandle[sockHandle] = self.dictSocketSendedHandle[sockHandle] + le
+        #     print("已发送数据总量：", self.dictSocketSendedHandle[sockHandle])
+        #
+        #     if self.dictSocketSendHandle[sockHandle] == self.dictSocketSendedHandle[sockHandle]:  # 如果待发送数据总长度等于已发送数据总长度，那么就把socket改成读等待
+        #         self.epollHandle.modify(sockHandle, select.EPOLLIN)
+        #         self.dictSocketSendHandle.pop(sockHandle)
+        #         self.dictSocketSendedHandle.pop(sockHandle)
+        #         print("删掉之前用的socket已经发送的句柄信息")
+        # print("已发送数据总长度：", sendLen)
+
+        # if not self.dictSocketShakeHandStatus[key.fd]:
+        #     dictData = self.dictSocketShakeHandKey[key.fd]
+        #     # print("key", dictData["Sec-WebSocket-Key"])
+        #     keyStr = dictData["Sec-WebSocket-Key"] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+        #     # print("**********,", key)
+        #     sha1 = hashlib.sha1()
+        #     sha1.update(str.strip(keyStr).encode("utf-8"))
+        #     ser_key = sha1.digest()
+        #     # print("sha1", ser_key)
+        #     base64str = base64.b64encode(ser_key).decode("utf-8")
+        #     # print("base64", base64str)
+        #     strings = "HTTP/1.1 101 Switching Protocol\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept:%s\r\n\r\n" % (base64str)
+        #     # print(strings)
+        #     strings = strings.encode("utf-8")
+        #     if not self.dictSocketShakeHandStatus[key.fd]:
+        #         self.dictSocketShakeHandStatus[key.fd] = True
+        #     self.selector.modify(key.fd, EVENT_READ, self.readable)
+        # else:
+        #     print(len(self.resDict[key.fd]["string"]))
+        #     strings = '{"status":"success", "message":"信息接收成功"}'
+        #     if not key.fd in self.dictSocketSendHandle:
+        #         # if filename == "":
+        #         strings = json.dumps(strings)
+        #         strings = self.packWebSocketData(strings.encode("utf-8"))  # 要发送的数据
+        #         # else:
+        #         #     data = b""
+        #         #     with open(filename, "rb") as fd:
+        #         #         data += fd.read()
+        #         #     print("要发送二进制文件总大小:", len(data))
+        #         #     strings = self.packWebSocketData(data)
+        #         #     print("要发送打包后的数据大小", len(strings))
+        #
+        # if not key.fd in self.dictSocketSendHandle:
+        #     self.dictSocketSendHandle[key.fd] = len(strings)  # 要发送数据的总长度
+        # if not key.fd in self.dictSocketSendedHandle:
+        #     self.dictSocketSendedHandle[key.fd] = 0  # 已发送数据总长度
+        # if not self.dictSocketShakeHandStatus[key.fd]:
+        #     self.dictSocketShakeHandStatus[key.fd] = True
+        # # print("要发送数据总长度：", totalLen)
+        # print("要发送的数据为：", strings)
+        # if not key.fd in self.dictSocketSendHandle:
+        #     self.dictSocketSendHandle[key.fd] = len(strings)  # 要发送数据的总长度
+        # if not key.fd in self.dictSocketSendedHandle:
+        #     self.dictSocketSendedHandle[key.fd] = 0  # 已发送数据总长度
+        #
+        # while self.dictSocketSendedHandle[key.fd] < self.dictSocketSendHandle[key.fd]:
+        #     try:
+        #         m = strings[self.dictSocketSendedHandle[key.fd]:]
+        #         le = self.dictSocketHandle[key.fd].send(m)
+        #         print("本次发送数据量:", le)
+        #         self.dictSocketSendedHandle[key.fd] = self.dictSocketSendedHandle[key.fd] + le
+        #         print("已发送数据总量：", self.dictSocketSendedHandle[key.fd])
+        #
+        #     except IOError as err:
+        #         if err.errno == 32:  # 如果对端关闭，还去发送会产生，"Broken pipe"的错误  错误码为32
+        #             # print("客户端已经关闭连接，服务端等待关闭......")
+        #             pass
+        #         if err.errno == 11:
+        #             print("写入缓冲区已满")
+        #             continue
+        #         else:
+        #             print("服务端发送数据未知错误")
+        # else:
+        #     self.selector.modify(key.fd, EVENT_READ, self.readable)
+        #     self.dictSocketSendHandle.pop(key.fd)
+        #     self.dictSocketSendedHandle.pop(key.fd)
+        #     print("删掉之前用的socket")
 
 
 
@@ -644,6 +874,12 @@ class webSocketServer(object):
             token += struct.pack("!Q", length)
         msg = token + msg_bytes
         return msg
+
+    def boardCast(self, sock):#广播到所有的连接上
+        for everySock in self.dictSocketHandle.values():
+            if not sock == everySock:
+                self.dictSocketHandleSendContent[everySock.fileno()] = '{"status":"success", "message":"have ' + str(len(self.dictSocketHandle)) + ' socket connect"}'
+                self.selector.modify(sock, EVENT_WRITE, self.writeable)
 
 if __name__ == "__main__":
     webSocketServer("0.0.0.0", 8089)

@@ -1,17 +1,16 @@
 # webSocketServer
 python3 webSocketServer
 
-注意：(webSocketServerUseSelector.py文件没有写完，因为都是逻辑上的问题，请参考另外的文件)
-
 ##### 环境要求：
-    linux。因为是用了select的epoll模式，所以不支持win、macos。
+    linux 使用webSocketServerUseEpollET.py或者webSocketServerUseLT.py文件，因为是用了select的epoll模式，不兼容windows、macos
+    windows、macos、linux，都可以使用webSocketServerUseSelector.py。
 ##### socket运行方式：
     socket全程非阻塞方式。
     webSocketServerUseEpollET.py为边缘触发方式。
     webSocketServerUseLT.py为水平触发方式。
     ET和LT方式，是两种不同的触发方式，代码结构也不一致。
     
-    webSocketServerUseSelector.py使用的是selectors的DefaultSelector的，貌似只有水平触发方式。
+    webSocketServerUseSelector.py使用的是selectors的DefaultSelector的，水平触发方式。边缘触发方式我没去研究
 #### 接收数据过程：
 ##### 握手阶段：
     遵从websocket的协议，
