@@ -1,6 +1,8 @@
 # webSocketServer
 python3 webSocketServer
 
+注意：(webSocketServerUseSelector.py文件没有写完，因为都是逻辑上的问题，请参考另外的文件)
+
 ##### 环境要求：
     linux。因为是用了select的epoll模式，所以不支持win、macos。
 ##### socket运行方式：

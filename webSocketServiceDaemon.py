@@ -19,7 +19,7 @@ class webSocketServiceDaemon(webSocketServer):
             self.dictSocketHandleSendContent[sock] = '{"status":"error", "message":"通讯数据格式错误"}'
 
 if __name__ == "__main__":
-    
+
     ipAddr = "0.0.0.0"
     port = 8089
     webSocketServiceDaemon(ipAddr, port)
